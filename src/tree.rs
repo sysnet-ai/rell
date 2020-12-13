@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use crate::rellcore::*;
 use crate::rellcore::errors::*;
@@ -8,20 +8,58 @@ use crate::parser::*;
 #[derive(Debug)]
 pub struct RellTree
 {
-    pub symbols: HashMap<SID, RellSym>, // SID -> Symbol Map
-    pub nodes:   HashMap<NID, RellN>,  // NID -> Node Map
+    pub symbols: BTreeMap<SID, RellSym>, // SID -> Symbol Map
+    pub nodes:   BTreeMap<NID, RellN>,  // NID -> Node Map
     pub next_id: NID,
 }
+
+impl std::fmt::Display for RellTree
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result
+    {
+        let mut to_visit = vec![(NID_ROOT, 0)];
+
+        while !to_visit.is_empty()
+        {
+            let (nid, depth) = to_visit.pop().unwrap();
+            let node = self.nodes.get(&nid).unwrap();
+
+            for _ in 0..depth
+            {
+                write!(f, "-")?;
+            }
+            writeln!(f, "{}", self.symbols.get(&node.sym).unwrap())?;
+
+            match &node.edge
+            {
+                RellE::Exclusive(_, nid) =>
+                {
+                    to_visit.push((*nid, depth+1));
+                },
+                RellE::NonExclusive(map) =>
+                {
+                    map.values().for_each(|nid| to_visit.push((*nid, depth+1)));
+                },
+                _ => {}
+            }
+        }
+
+        Ok(())
+    }
+}
+
 impl RellTree
 {
     pub fn new() -> Self
     {
         //
-        let mut ret = Self { symbols: HashMap::new(), nodes: HashMap::new(), next_id: NID_ROOT };
-        ret.nodes.insert(NID_ROOT, RellN { edge: RellE::NonExclusive(HashMap::new()), sym: ret.get_sid("ROOT") }); 
+        let mut ret = Self { symbols: BTreeMap::new(), nodes: BTreeMap::new(), next_id: NID_ROOT + 1 };
+        let sid = ret.get_sid("ROOT");
+        ret.nodes.insert(NID_ROOT, RellN { edge: RellE::NonExclusive(BTreeMap::new()), sym: sid });
+        ret.symbols.insert(sid, RellSym { val: RellSymValue::Literal("ROOT".to_string()) });
         ret
     }
-    
+
     pub fn get_root<'a>(&'a self) -> &'a RellN
     {
         self.nodes.get(&NID_ROOT).unwrap()
@@ -65,7 +103,7 @@ impl RellTree
             }
             (start_at, insert_nid)
         };
-        
+
         if start_at == statement.len()
         {
             return Ok(vec![]); // Everything in that statement is already known
@@ -139,8 +177,44 @@ impl RellTree
 
     fn get_next_nid(&mut self) -> NID
     {
-        // NOT THREAD SAFE!!
+        // NOT THREAD SAFE!! - hehe
+        let v = self.next_id;
         self.next_id += 1;
-        self.next_id
+        v
+    }
+}
+
+#[cfg(test)]
+mod test
+{
+    use super::*;
+
+    #[test]
+    fn test_fmt() -> Result<()>
+    {
+        let mut t = RellTree::new();
+        t.add_statement("a.b.c")?;
+        t.add_statement("a.b.d")?;
+        t.add_statement("a.f.e")?;
+        t.add_statement("z.q.r")?;
+        t.add_statement("z.x!p")?;
+
+        assert!(t.add_statement("z!y!y").is_err()); // Incompatible with z.x!p
+
+        assert_eq!(
+            format!("{}", t),
+                   "ROOT\n\
+                    -a\n\
+                    --b\n\
+                    ---d\n\
+                    ---c\n\
+                    --f\n\
+                    ---e\n\
+                    -z\n\
+                    --x\n\
+                    ---p\n\
+                    --q\n\
+                    ---r\n");
+        Ok(())
     }
 }

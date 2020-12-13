@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use crate::rellcore::*;
 
@@ -38,7 +38,7 @@ impl RellParser
                     let edge = match token_it.next().unwrap()
                     {
                         ParseToken::Exclusive    => RellE::Exclusive(sid, NID_INVALID),
-                        ParseToken::NonExclusive => RellE::NonExclusive(HashMap::new()),
+                        ParseToken::NonExclusive => RellE::NonExclusive(BTreeMap::new()),
                         ParseToken::EOL => RellE::Empty,
                         err_tok => return Err(Error::CustomError(format!("Found Token {:?} after {:?}", err_tok, token))),
                     };

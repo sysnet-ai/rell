@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::hash::Hash;
 
 // CORE
@@ -41,7 +41,7 @@ use errors::{Result, Error};
 #[derive(Debug, PartialEq)]
 pub struct RellN
 {
-    pub edge: RellE, 
+    pub edge: RellE,
     pub sym: SID
 }
 impl RellN
@@ -57,19 +57,46 @@ impl RellN
         {
             (&RellE::Empty, other) =>
             {
-                self.edge = other.clone(); 
+                self.edge = other.clone();
                 Ok(())
             },
             (_, _) => Err(Error::CustomError(format!("CANT UPGRADE {:?} TO {:?}", self.edge, to_edge)))
         }
     }
 }
+
+impl std::fmt::Display for RellN
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result
+    {
+        write!(f, "Node[{}]:", self.sym)?;
+        write!(f, "{}", self.edge)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum RellE
 {
     Empty,
-    NonExclusive(HashMap<SID, NID>),
+    NonExclusive(BTreeMap<SID, NID>),
     Exclusive(SID, NID),
+}
+impl std::fmt::Display for RellE
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result
+    {
+        match self
+        {
+            Self::Empty =>
+            {
+            },
+            Self::Exclusive(_sid, _nid) =>
+            {
+            },
+            _ => {}
+        }
+        write!(f, "NODE")
+    }
 }
 impl RellE
 {
@@ -123,4 +150,23 @@ pub struct RellSym
 {
     pub val: RellSymValue,
     // ref count?
+}
+
+
+impl std::fmt::Display for RellSym
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result
+    {
+        match &self.val
+        {
+            RellSymValue::Numeric(n) =>
+            {
+                write!(f, "{}", n)
+            },
+            RellSymValue::Literal(s) =>
+            {
+                write!(f, "{}", s)
+            }
+        }
+    }
 }
