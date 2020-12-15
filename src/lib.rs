@@ -63,26 +63,51 @@ mod tests
     }
 
     #[test]
-    fn parse()
+    fn parse() -> Result<()>
     {
         let w = RellTree::new();
         let err = RellParser::parse_simple_statement("brown..nope", &w);
         assert!(if let Err(Error::InvalidChar('.', 6)) = err { true } else { false }, "Result is: {:?}", err);
+
+        let (_, syms) = RellParser::parse_simple_statement("brown.lastname.perez", &w)?;
+
+        let expected = vec![
+            RellSym { val: RellSymValue::Literal("brown".to_string())    },
+            RellSym { val: RellSymValue::Literal("lastname".to_string()) },
+            RellSym { val: RellSymValue::Literal("perez".to_string())    }];
+        assert_eq!(syms, expected, "{:?}", syms);
+
+        let (_, syms2) = RellParser::parse_simple_statement("brown.height!50", &w)?;
+        let expected2 = vec![
+            RellSym { val: RellSymValue::Literal("brown".to_string())    },
+            RellSym { val: RellSymValue::Literal("height".to_string()) },
+            RellSym { val: RellSymValue::Numeric(50.0)    }];
+        assert_eq!(syms2, expected2, "{:?}", syms2);
+
+        let result = RellParser::parse_simple_statement("brown.height!5m", &w);
+        if let Err(Error::CustomError(_)) = result
+        {
+            Ok(())
+        }
+        else
+        {
+            Err(Error::CustomError(format!("Unexpected Result {:?}", result)))
+        }
     }
 
 
     #[test]
-    fn t_start()
+    fn t_start() -> Result<()>
     {
         let mut w = RellTree::new();
-        w.add_statement("brown.is!happy").unwrap();
-        w.add_statement("brown.knows.stuff").unwrap();
-        w.add_statement("brown.knows.me").unwrap();
+        w.add_statement("brown.is!happy")?;
+        w.add_statement("brown.knows.stuff")?;
+        w.add_statement("brown.knows.me")?;
 
         assert_eq!(w.add_statement("brown.knows").unwrap(), vec![]); // Already know all of this info, nothing to insert
         assert_eq!(w.add_statement("brown.is").unwrap(), vec![]);
 
-        w.add_statement("brown.is!sad").unwrap();
+        w.add_statement("brown.is!sad")?;
         let node_id_of_brownissadtoday = w.add_statement("brown.is!sad.today").unwrap()[0];
         assert_eq!(w.query("brown.is!sad.today").unwrap(), w.nodes.get(&node_id_of_brownissadtoday).unwrap());
         assert_eq!(w.query("brown.is.sad.today").unwrap(), w.nodes.get(&node_id_of_brownissadtoday).unwrap()); // !sad satifies .sad
@@ -91,13 +116,13 @@ mod tests
         assert!(w.query("brown!is!sad.today").is_none()); // !is can't be satisfied by .is
 
         let e = w.add_statement("brown.is.sad.today");
-        if let Err(Error::CustomError(_)) = e 
+        if let Err(Error::CustomError(_)) = e
         {
-            // Can't !let :( 
+            Ok(())
         }
         else
         {
-            panic!("Unexpected Error {:?}", e);
+            Err(Error::CustomError(format!("Unexpected Result {:?}", e)))
         }
     }
 }

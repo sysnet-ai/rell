@@ -16,8 +16,9 @@ pub enum ParseToken
 pub struct RellParser;
 impl RellParser
 {
+    pub const NID_INVALID: NID = 0;
     pub fn parse_simple_statement<S, SF>(statement: S, sidfactory: &SF) -> Result<(Vec<RellN>, Vec<RellSym>)> // Simple Statments in EL: A | A.B | A!B
-        where S: AsRef<str>, SF: SIDGenerator 
+        where S: AsRef<str>, SF: SIDGenerator
     {
 
         let mut nodes = vec![];
@@ -37,14 +38,28 @@ impl RellParser
 
                     let edge = match token_it.next().unwrap()
                     {
-                        ParseToken::Exclusive    => RellE::Exclusive(sid, NID_INVALID),
+                        ParseToken::Exclusive    => RellE::Exclusive(sid, Self::NID_INVALID),
                         ParseToken::NonExclusive => RellE::NonExclusive(BTreeMap::new()),
                         ParseToken::EOL => RellE::Empty,
                         err_tok => return Err(Error::CustomError(format!("Found Token {:?} after {:?}", err_tok, token))),
                     };
 
                     nodes.push( RellN { edge, sym: sid } );
-                    syms.push ( RellSym { val: RellSymValue::Literal(sym.to_string()) } )
+
+                    let val = match sym.chars().next().unwrap()
+                    {
+                        '0'..='9' => {
+                            match sym.parse::<f32>()
+                            {
+                                Ok(num) => RellSymValue::Numeric(num),
+                                Err(e)  => return Err(Error::CustomError(format!("{}", e))),
+                            }
+                        },
+                        'A'..='Z' => { panic!("CANNOT DO UPPER CASE - THAT'S FOR CONSTANTS AND IS NOT IMPLEMENTED YET!: {}", statement) },
+                        // No need to check for invalid characters, that was done by the tokenizer
+                        _ => { RellSymValue::Literal(sym.to_string()) }
+                    };
+                    syms.push ( RellSym { val } )
                 }
                 err_tok => {
                     return Err(Error::CustomError(format!("Upstream Error: TOKENIZER - received unreasonable token sequence TOKEN: {:?} when expecting SYMBOL(S,f,e)", err_tok)));
@@ -76,7 +91,7 @@ impl RellParser
                     Some(".") => ParseToken::NonExclusive,
                     Some("!") => ParseToken::Exclusive,
                     None      => ParseToken::EOL,
-                    Some(ch) => return Err(Error::CustomError(format!("Upstream Error: SCANNER - marked {} as EOS at {}", ch, i_eos))), 
+                    Some(ch) => return Err(Error::CustomError(format!("Upstream Error: SCANNER - marked {} as EOS at {}", ch, i_eos))),
                 }
             );
             scan = i_eos+1;
@@ -95,7 +110,7 @@ impl RellParser
         {
             let str_i = start + i;
             if let '.' | '!' = curr_c
-            { 
+            {
                 if  i == 0 || str_i == statement.len() - 1 // ! or . at the beginning or end is not allowed
                 {
                     return Err(Error::InvalidChar(curr_c, str_i));

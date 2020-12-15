@@ -4,8 +4,6 @@ use std::hash::Hash;
 // CORE
 pub type NID = usize; // NODE ID
 pub type SID = u64; // SYMBOL ID
-pub const NID_INVALID: NID = 0;
-pub const NID_ROOT: NID = 1;
 pub trait SIDGenerator
 {
     fn get_sid<S>(&self, sym:S) -> SID
@@ -139,19 +137,18 @@ impl RellE
         }
     }
 }
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum RellSymValue
 {
     Numeric(f32),
     Literal(String),
 }
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct RellSym
 {
     pub val: RellSymValue,
     // ref count?
 }
-
 
 impl std::fmt::Display for RellSym
 {
