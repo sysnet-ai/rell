@@ -29,7 +29,7 @@ pub mod errors
             match self
             {
                 Error::CustomError(m) => formatter.write_str(m),
-                _ => formatter.write_str(&self.to_string())
+                Error::InvalidChar(ch, pos)  => formatter.write_fmt(format_args!("Invalid Char {} at {}", ch, pos))
             }
         }
     }
