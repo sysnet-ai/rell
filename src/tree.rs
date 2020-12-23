@@ -26,12 +26,12 @@ impl RellTree
         ret
     }
 
-    pub fn get_root<'a>(&'a self) -> &'a RellN
+    pub fn get_root(&self) -> &RellN
     {
         self.nodes.get(&Self::NID_ROOT).unwrap()
     }
 
-    pub fn get_mut_root<'a>(&'a mut self) -> &'a mut RellN
+    pub fn get_mut_root(&mut self) -> &mut RellN
     {
         self.nodes.get_mut(&Self::NID_ROOT).unwrap()
     }
@@ -98,7 +98,7 @@ impl RellTree
         Ok(new_nids)
     }
 
-    pub fn query<'a, S>(&'a self, statement: S) -> Option<&'a RellN>
+    pub fn query<S>(&self, statement: S) -> Option<&RellN>
         where S: AsRef<str>
     {
         let statement = statement.as_ref();
@@ -212,7 +212,7 @@ impl RellTree
                             glb.clone_subgraph_into(&glb_nid, other, x_nid, true).unwrap();
                         },
                         RellE::NonExclusive(nex_map) => {
-                            for (_, nex_nid) in nex_map
+                            for nex_nid in nex_map.values()
                             {
                                 glb.clone_subgraph_into(&glb_nid, other, nex_nid, false).unwrap();
                             }
@@ -250,10 +250,10 @@ impl RellTree
         }
 
         // Add all symbols from both trees into the GLB
-        for sym_tbl in vec![&self.symbols, &other.symbols]
+        for sym_tbl in &[&self.symbols, &other.symbols]
         {
             //TODO: This just stomps all values, Ref counting?
-            for (sid, sym) in sym_tbl
+            for (sid, sym) in sym_tbl.iter()
             {
                 glb.symbols.insert(*sid, sym.clone());
             }
@@ -278,10 +278,13 @@ impl RellTree
         }
         else
         {
-            match insert_node.edge
+            if let RellE::Empty = insert_node.edge
             {
-                RellE::Empty => { insert_node.upgrade(&RellE::NonExclusive(BTreeMap::new()))?; },
-                _ => { /*...?*/ },
+                insert_node.upgrade(&RellE::NonExclusive(BTreeMap::new()))?;
+            }
+            else
+            {
+                { /*...?*/ }; // ??
             }
 
             insert_node.insert(&sid, &new_nid);
@@ -445,6 +448,14 @@ mod traitimpls
             }
 
             Ok(())
+        }
+    }
+
+    impl Default for RellTree
+    {
+        fn default() -> Self
+        {
+            Self::new()
         }
     }
 }
