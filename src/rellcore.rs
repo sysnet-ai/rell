@@ -137,13 +137,13 @@ impl RellE
         }
     }
 }
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum RellSymValue
 {
     Numeric(f32),
     Literal(String),
 }
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct RellSym
 {
     pub val: RellSymValue,

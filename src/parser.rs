@@ -100,7 +100,7 @@ impl RellParser
         Ok(qt)
     }
 
-    const INVALID_TOKENS: &'static str = "%$@#,][";
+    const INVALID_CHARS: &'static str = "%$@#,][";
     pub fn find_next_eos<S>(statement: S, start: usize) -> Result<usize>
         where S: AsRef<str>
     {
@@ -118,7 +118,7 @@ impl RellParser
                 return Ok(str_i);
             }
 
-            if  RellParser::INVALID_TOKENS.contains(curr_c)
+            if  RellParser::INVALID_CHARS.contains(curr_c)
             {
                 return Err(Error::InvalidChar(curr_c, str_i));
             }

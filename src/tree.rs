@@ -130,14 +130,18 @@ impl RellTree
 
     fn add_symbol_instance(&mut self, sym: RellSym)
     {
-        let sid = if let RellSymValue::Literal(ssym) = &sym.val
+        let sid = match &sym.val
         {
-            self.get_sid(ssym)
-        }
-        else
-        {
-            panic!("TODO: IMPLEMENT NUMERIC VALUES SEPARATEDLY - HOW DID YOU GET HERE!?");
+            RellSymValue::Literal(ssym) =>
+            {
+                self.get_sid(ssym)
+            },
+            RellSymValue::Numeric(_ssym) =>
+            {
+                panic!("Numeric Symbols aren't fully implemented right now");
+            },
         };
+
         self.symbols.insert(sid, sym);
     }
 
@@ -147,6 +151,183 @@ impl RellTree
         let v = self.next_id;
         self.next_id += 1;
         v
+    }
+}
+
+// GLB and LUB operations
+impl RellTree
+{
+    // Greatest Lower Bound - Union of Trees
+    pub fn greatest_lower_bound(&self, other: &Self) -> Option<Self>
+    {
+        let mut glb = RellTree::new();
+
+        let mut node_trios = vec![(RellTree::NID_ROOT, RellTree::NID_ROOT, RellTree::NID_ROOT)];
+        while !node_trios.is_empty()
+        {
+            let (a_nid, b_nid, glb_nid) = node_trios.pop().unwrap();
+            let a_node   = self.nodes.get(&a_nid).unwrap();
+            let b_node   = other.nodes.get(&b_nid).unwrap();
+
+            match(&a_node.edge, &b_node.edge)
+            {
+                (RellE::NonExclusive(a_emap), RellE::NonExclusive(b_emap)) =>
+                {
+                    // If both non-exclusive add to GLB node the union of
+                    // both maps and add new nodes appropriately
+                    //
+
+                    for (&sym, a_nid) in a_emap
+                    {
+
+                        if let Some(b_nid) = b_emap.get(&sym)
+                        {
+                            // Symbol exists in both nodes, insert into glb and add them to the
+                            // queue
+                            let new_nid = glb.insert_into(&glb_nid, RellN { edge: RellE::Empty, sym }, false).unwrap();
+                            node_trios.push((*a_nid, *b_nid, new_nid))
+                        }
+                        else
+                        {
+                            glb.clone_subgraph_into(&glb_nid, self, a_nid, false).unwrap();
+                        }
+                    }
+
+                    for (&sym, b_nid) in b_emap
+                    {
+                        if a_emap.get(&sym).is_none()
+                        {
+                            // Symbol exists only in B, copy subtree here
+                            glb.clone_subgraph_into(&glb_nid, other, b_nid, false).unwrap();
+                        }
+                        // else {...} already taken care of in the loop above
+                    }
+                },
+                (RellE::Empty, e) | (e, RellE::Empty) =>
+                {
+                    // If one side is empty, just clone the other tree into the GLB-tree
+                    match e 
+                    {
+                        RellE::Exclusive(_, x_nid) => {
+                            glb.clone_subgraph_into(&glb_nid, other, x_nid, true).unwrap();
+                        },
+                        RellE::NonExclusive(nex_map) => {
+                            for (_, nex_nid) in nex_map
+                            {
+                                glb.clone_subgraph_into(&glb_nid, other, nex_nid, false).unwrap();
+                            }
+                        },
+                        _ => {}
+                    }
+                },
+                (RellE::Exclusive(a_sid, a_nid), RellE::Exclusive(b_sid, b_nid)) =>
+                {
+                    // If they both go to the same symbol add, else incompat
+                    if a_sid == b_sid
+                    {
+                        let new_nid = glb.insert_into(&glb_nid, RellN { edge: RellE::Empty, sym: *a_sid }, true).unwrap();
+                        node_trios.push((*a_nid, *b_nid, new_nid));
+                    }
+                    else
+                    {
+                        return None; // Incompatible Trees
+                    }
+                },
+                (RellE::Exclusive(x_sid, x_nid), RellE::NonExclusive(nex_map)) | (RellE::NonExclusive(nex_map), RellE::Exclusive(x_sid, x_nid)) =>
+                {
+                    // if an X and a NX edges are found, they're considered compatible IFF they go
+                    // to the same symbol AND the NX edge goes to no other symbols
+                    //
+                    if !nex_map.contains_key(&x_sid) || nex_map.len() != 1
+                    {
+                        return None;
+                    }
+
+                    let new_nid = glb.insert_into(&glb_nid, RellN { edge: RellE::Empty, sym: *x_sid }, true).unwrap();
+                    node_trios.push((*x_nid, *nex_map.get(&x_sid).unwrap(), new_nid));
+                }
+            }
+        }
+
+        // Add all symbols from both trees into the GLB
+        for sym_tbl in vec![&self.symbols, &other.symbols]
+        {
+            //TODO: This just stomps all values, Ref counting?
+            for (sid, sym) in sym_tbl
+            {
+                glb.symbols.insert(*sid, sym.clone());
+            }
+        }
+
+        Some(glb)
+    }
+
+
+    // TODO: I don't like these 2 functions
+    fn insert_into(&mut self, into_n: &NID, new_node: RellN, exclusive: bool) -> Result<NID>
+    {
+        //TODO: Not really taking care of repeated edges, shouldn't affect the data but
+        // wastes memory
+        let new_nid = self.get_next_nid();
+        let sid = new_node.sym;
+        let insert_node = self.nodes.get_mut(into_n).unwrap();
+
+        if exclusive
+        {
+            insert_node.upgrade(&RellE::Exclusive(sid, new_nid))?;
+        }
+        else
+        {
+            match insert_node.edge
+            {
+                RellE::Empty => { insert_node.upgrade(&RellE::NonExclusive(BTreeMap::new()))?; },
+                _ => { /*...?*/ },
+            }
+
+            insert_node.insert(&sid, &new_nid);
+        }
+        self.nodes.insert(new_nid,  new_node);
+
+        Ok(new_nid)
+    }
+
+    fn clone_subgraph_into(&mut self, into_n: &NID, other_tree: &RellTree, from_n: &NID, exclusive: bool) -> Result<NID>
+    {
+        let sym = other_tree.nodes.get(from_n).unwrap().sym;
+
+        let new_subgraph_root = RellN { edge: RellE::Empty, sym };
+        let new_subgraph_nid = self.insert_into(into_n, new_subgraph_root, exclusive)?;
+
+        let mut node_pairs = vec![(new_subgraph_nid, *from_n)];
+        while !node_pairs.is_empty()
+        {
+            let (self_nid, c_nid) = node_pairs.pop().unwrap();
+
+            let c_node = other_tree.nodes.get(&c_nid).unwrap();
+
+            match &c_node.edge
+            {
+                &RellE::Exclusive(c_sid, c_nid) =>
+                {
+                    let new_node = RellN { edge: RellE::Empty, sym: c_sid };
+                    let new_nid = self.insert_into(&self_nid, new_node, true)?;
+                    node_pairs.push((new_nid, c_nid));
+                },
+                RellE::NonExclusive(c_map) =>
+                {
+                   for (&c_sid, &c_nid) in c_map
+                    {
+                        let new_node = RellN { edge: RellE::Empty, sym: c_sid };
+                        let new_nid = self.insert_into(&self_nid, new_node, false)?;
+                        node_pairs.push((new_nid, c_nid));
+                    }
+                },
+                _ =>
+                {
+                }
+            }
+        }
+        Ok(new_subgraph_nid)
     }
 }
 
@@ -207,11 +388,13 @@ mod traitimpls
                         let b_nid = b_emap.get(a_sid).unwrap();
                         node_pairs.push((*a_nid, *b_nid));
                     },
-                    (RellE::Empty, _) => {
+                    (RellE::Empty, _) =>
+                    {
                         // B is a leaf, in A is not this is ok
                         continue
                     },
-                    (_, _) => {
+                    (_, _) =>
+                    {
                         return Some(std::cmp::Ordering::Greater);
                     }
                 }
@@ -376,6 +559,54 @@ mod test
 
         t2.add_statement("t.c.d.e")?;
         assert!(t < t2, "{} < {}", t, t2);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_clone_into() -> Result<()>
+    {
+        Ok(())
+    }
+
+    #[test]
+    fn test_glb() -> Result<()>
+    {
+        let mut t = RellTree::new();
+        t.add_statement("t.a")?;
+        let mut t2 = RellTree::new();
+        t2.add_statement("t.b")?;
+
+        let glb = t.greatest_lower_bound(&t2).unwrap();
+        
+        assert_eq!(format!("{}", glb), 
+                          "ROOT\n\
+                           -t\n\
+                           --b\n\
+                           --a\n");
+        //
+        let mut t3 = RellTree::new();
+        let mut t4 = RellTree::new();
+
+        t3.add_statement("t!a.b")?;
+        t4.add_statement("t!a.c.d")?;
+        let glb2 = t3.greatest_lower_bound(&t4).unwrap();
+        assert_eq!(format!("{}", glb2), 
+                          "ROOT\n\
+                           -t\n\
+                           -*a\n\
+                           ---b\n\
+                           ---c\n\
+                           ----d\n");
+        
+        let mut t5 = RellTree::new();
+        let mut t6 = RellTree::new();
+        t5.add_statement("t!a")?;
+        t6.add_statement("t.b")?;
+
+        let glb3 = t5.greatest_lower_bound(&t6);
+
+        assert!(glb3.is_none(), "{}", glb3.unwrap());
 
         Ok(())
     }
