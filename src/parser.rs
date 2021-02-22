@@ -56,6 +56,7 @@ impl RellParser
                             }
                         },
                         'A'..='Z' => { panic!("CANNOT DO UPPER CASE - THAT'S FOR CONSTANTS AND IS NOT IMPLEMENTED YET!: {}", statement) },
+
                         // No need to check for invalid characters, that was done by the tokenizer
                         _ => { RellSymValue::Literal(sym.to_string()) }
                     };

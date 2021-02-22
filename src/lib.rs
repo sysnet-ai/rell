@@ -11,6 +11,8 @@ pub mod parser;
 pub mod tree;
 use tree::*;
 
+pub mod tree_traits;
+
 impl SIDGenerator for RellTree
 {
     fn get_sid<S>(&self, sym:S) -> SID
@@ -59,7 +61,7 @@ mod tests
     {
         let w = RellTree::new();
         let expected = vec![ParseToken::Symbol(w.get_sid("brown"), 0, 5), ParseToken::Exclusive,
-                            ParseToken::Symbol(w.get_sid("is"), 6, 8), ParseToken::EOL];
+                            ParseToken::Symbol(w.get_sid("is"),    6, 8), ParseToken::EOL];
 
         assert_eq!(expected, RellParser::tokenize("brown!is", &w).unwrap());
     }
