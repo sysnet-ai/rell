@@ -13,6 +13,9 @@ use tree::*;
 
 pub mod tree_traits;
 
+pub mod logic;
+pub mod binding;
+
 impl SIDGenerator for RellTree
 {
     fn get_sid<S>(&self, sym:S) -> SID
@@ -88,6 +91,14 @@ mod tests
             RellSym { val: RellSymValue::Numeric(50.0)    }];
         assert_eq!(syms2, expected2, "{:?}", syms2);
 
+        let (_, syms3) = RellParser::parse_simple_statement("brown.Height!50", &w)?;
+        let expected3 = vec![
+            RellSym { val: RellSymValue::Literal("brown".to_string())    },
+            RellSym { val: RellSymValue::Identifier("Height".to_string()) },
+            RellSym { val: RellSymValue::Numeric(50.0)    }];
+        assert_eq!(syms3, expected3, "{:?}", syms3);
+
+
         let result = RellParser::parse_simple_statement("brown.height!5m", &w);
         if let Err(Error::CustomError(_)) = result
         {
@@ -101,7 +112,7 @@ mod tests
 
 
     #[test]
-    fn t_start() -> Result<()>
+    fn baseline_verification() -> Result<()>
     {
         let mut w = RellTree::new();
         w.add_statement("brown.is!happy")?;

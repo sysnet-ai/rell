@@ -137,33 +137,42 @@ impl RellE
         }
     }
 }
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum RellSymValue
 {
     Numeric(f32),
     Literal(String),
+    Identifier(String)
 }
 #[derive(Debug, PartialEq, Clone)]
 pub struct RellSym
 {
     pub val: RellSymValue,
-    // ref count?
+}
+
+impl RellSym
+{
+    pub fn get_display(&self) -> String
+    {
+        match &self.val
+        {
+            RellSymValue::Numeric(n) =>
+            {
+                n.to_string()
+            },
+            RellSymValue::Literal(s) | RellSymValue::Identifier(s) =>
+            {
+                s.to_string()
+            }
+        }
+    }
 }
 
 impl std::fmt::Display for RellSym
 {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result
     {
-        match &self.val
-        {
-            RellSymValue::Numeric(n) =>
-            {
-                write!(f, "{}", n)
-            },
-            RellSymValue::Literal(s) =>
-            {
-                write!(f, "{}", s)
-            }
-        }
-    }
+        write!(f, "{}", self.get_display())
+    } 
 }

@@ -55,15 +55,17 @@ impl RellParser
                                 Err(e)  => return Err(Error::CustomError(format!("{}", e))),
                             }
                         },
-                        'A'..='Z' => { panic!("CANNOT DO UPPER CASE - THAT'S FOR CONSTANTS AND IS NOT IMPLEMENTED YET!: {}", statement) },
+                        'A'..='Z' => {
+                            RellSymValue::Identifier(sym.to_string())
+                        },
 
                         // No need to check for invalid characters, that was done by the tokenizer
                         _ => { RellSymValue::Literal(sym.to_string()) }
                     };
                     syms.push ( RellSym { val } )
-                }
+                },
                 err_tok => {
-                    return Err(Error::CustomError(format!("Upstream Error: TOKENIZER - received unreasonable token sequence TOKEN: {:?} when expecting SYMBOL(S,f,e)", err_tok)));
+                    return Err(Error::CustomError(format!("Upstream Error: TOKENIZER - received unreasonable token sequence TOKEN: {:?} when expecting a SYMBOL", err_tok)));
                 }
             }
         }

@@ -139,6 +139,10 @@ impl RellTree
             RellSymValue::Numeric(num) =>
             {
                 self.get_sid(format!("{}", num)) // TODO: This feels a bit redundant
+            },
+            RellSymValue::Identifier(ssym) =>
+            {
+                panic!("Cannot add {} as a symbol - Upper case means unbound variable", ssym);
             }
         };
         self.symbols.insert(sid, sym);
@@ -189,6 +193,7 @@ impl RellTree
                         }
                         else
                         {
+                            // Symbol exists in only in A, so clone the sub-tree and be done
                             glb.clone_subgraph_into(&glb_nid, self, a_nid, false).unwrap();
                         }
                     }
@@ -262,7 +267,9 @@ impl RellTree
         Some(glb)
     }
 
-
+    //
+    //
+    //
     // TODO: I don't like these 2 functions
     fn insert_into(&mut self, into_n: &NID, new_node: RellN, exclusive: bool) -> Result<NID>
     {
