@@ -93,7 +93,7 @@ impl std::fmt::Display for RellTree
 
                 write!(f, "{}", tw)?;
             }
-            writeln!(f, "{}", self.symbols.get_sym_table().get(&node.sym).unwrap())?;
+            writeln!(f, "{}", self.symbols.get_sym(&node.sym).unwrap())?;
 
             match &node.edge
             {

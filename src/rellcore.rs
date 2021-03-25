@@ -112,6 +112,20 @@ impl RellE
         }
     }
 }
+impl std::fmt::Display for RellE
+{
+    fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result
+    {
+        let s = match self
+        {
+            Self::Empty =>           { ' ' },
+            Self::Exclusive(_, _) => { '!' },
+            Self::NonExclusive(_) => { '.' }
+        };
+
+        write!(formatter, "{}", s)
+    }
+}
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum RellSymValue
@@ -124,17 +138,16 @@ pub enum RellSymValue
 pub struct RellSym
 {
     val: RellSymValue,
-    pub binding_state: Option<u32>
 }
 
 impl RellSym
 {
     pub fn new(val: RellSymValue) -> Self
     {
-        Self { val, binding_state: None }
+        Self { val }
     }
 
-    pub fn get_display(&self) -> String
+    fn get_display(&self) -> String
     {
         match &self.get_val()
         {
@@ -151,19 +164,7 @@ impl RellSym
 
     pub fn get_val(&self) -> &RellSymValue
     {
-            if let RellSymValue::Identifier(_) = self.val
-            {
-                //  get value from binding state
-                match self.binding_state
-                {
-                    None => &self.val,
-                    Some(val) => &self.val
-                }
-            }
-            else
-            {
-                &self.val
-            }
+        &self.val
     }
 }
 

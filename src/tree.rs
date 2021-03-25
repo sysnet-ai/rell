@@ -23,7 +23,7 @@ impl RellTree
         let mut ret = Self { symbols: SymbolsTable::new(), nodes: BTreeMap::new(), next_id: Self::NID_ROOT + 1 };
         let sid = ret.symbols.get_sid("ROOT");
         ret.nodes.insert(Self::NID_ROOT, RellN { edge: RellE::NonExclusive(BTreeMap::new()), sym: sid });
-        ret.symbols.get_sym_table_mut().insert(sid, RellSym::new(RellSymValue::Literal("ROOT".to_string())));
+        ret.symbols.insert(sid, RellSym::new(RellSymValue::Literal("ROOT".to_string())));
         ret
     }
 
@@ -146,7 +146,7 @@ impl RellTree
                 panic!("Cannot add {} as a symbol - Upper case means unbound variable", ssym);
             }
         };
-        self.symbols.get_sym_table_mut().insert(sid, sym);
+        self.symbols.insert(sid, sym);
     }
 
     fn get_next_nid(&mut self) -> NID
@@ -258,9 +258,9 @@ impl RellTree
         for sym_tbl in &[&self.symbols, &other.symbols]
         {
             //TODO: This just stomps all values, Ref counting?
-            for (sid, sym) in sym_tbl.get_sym_table().iter()
+            for (sid, sym) in sym_tbl.symbols_iter()
             {
-                glb.symbols.get_sym_table_mut().insert(*sid, sym.clone());
+                glb.symbols.insert(*sid, sym.clone());
             }
         }
 

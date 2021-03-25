@@ -7,128 +7,104 @@ use crate::tree::*;
 use crate::symbols::*;
 
 
-struct BindingState<'a>
+struct BindingState
 {
-    variables: BTreeMap<String, BindingVar>, // Identifier -> Bound Variable State
-    nodes: BTreeMap<String, &'a RellN>
+    statements: Vec<(Vec<RellN>, Vec<RellSym>)>, // List of pre-parsed binding statements
 }
-impl<'a> BindingState<'a>
+#[derive(Debug)]
+struct BindingVarState
+{
+    nid: NID,
+    path: String,
+    bound_vars: Vec<(String, RellSym)>
+}
+impl BindingState
 {
     pub fn new() -> Self
     {
-        Self { variables: BTreeMap::new(), nodes: BTreeMap::new() }
+        Self { statements: vec![] }
     }
 
     pub fn add_bindable_statement<S>(&mut self, statement: S) -> Result<()>
-      where S: AsRef<str>
+        where S: AsRef<str>
     {
-
-        let mut sym_table = SymbolsTable::new();
-        let (statement_tree, syms) = RellParser::parse_simple_statement(statement, &sym_table)?; //TODO: Need to redo the SIDFactory trait
-
-        let mut path_to_node = "".to_string();
-        for (s_inx, sym) in syms.iter().enumerate()
-        {
-            let is_var = if let RellSymValue::Identifier(_) = sym.get_val() { true } else { false };
-
-            if is_var
-            {
-                let exclusive = &path_to_node[path_to_node.len()-1..] == "!"; 
-                let var = BindingVar {
-                                       bound_value: None,
-                                       path_to_parent: path_to_node[..path_to_node.len()-1].to_string(), // Remove the last char
-                                       nonex_iter_count: 0,
-                                       exclusive,
-                                     }; 
-                println!("{:?} {}", var, sym.get_display());
-                self.variables.insert(sym.get_display(), var);
-            }
-
-            path_to_node += &sym.get_display();
-            path_to_node += match statement_tree[s_inx].edge
-            {
-                RellE::NonExclusive(_) => ".",
-                RellE::Exclusive(_, _) => "!",
-                RellE::Empty => "",
-            };
-        }
+        let sym_table = SymbolsTable::new();
+        let parse_result = RellParser::parse_simple_statement(statement, &sym_table)?;
+        self.statements.push(parse_result);
         Ok(())
     }
 
-    pub fn init_binding_on_tree(&mut self, tree: &'a RellTree)
+    pub fn init_binding_from_tree(&mut self, tree: &RellTree)
     {
-        for (var_name, var_state) in self.variables.iter_mut()
+        for (_, stmnt_symbols) in &self.statements
         {
-            if var_state.is_unbound()
+            self.init_biniding_from_statement(tree, stmnt_symbols);
+        }
+    }
+
+    pub fn init_biniding_from_statement(&self, tree: &RellTree, stmnt_symbols: &Vec<RellSym>) -> Vec<BindingVarState>
+    {
+        let mut nodes_to_verify = vec![BindingVarState { nid: RellTree::NID_ROOT, path: "".to_string(), bound_vars: vec![] }];
+        for sym in stmnt_symbols
+        {
+            let mut new_ntv = vec![];
+            while !nodes_to_verify.is_empty()
             {
-                if let Some(node) = var_state.bind_to(tree)
+                let cur_n = nodes_to_verify.pop().unwrap();
+                let node = tree.nodes.get(&cur_n.nid).unwrap();
+                if let RellSymValue::Identifier(id) = sym.get_val()
                 {
-                    self.nodes.insert(var_name.to_string(), node);
+                    let nids = match &node.edge
+                    {
+                        RellE::Exclusive(_, a_nid) => {
+                            vec![*a_nid]
+                        },
+                        RellE::NonExclusive(a_map) => {
+                            a_map.values().cloned().collect()
+                        },
+                        _ => { vec![] }
+                    };
+
+                    for nid in nids
+                    {
+                        let mut bound_vars = cur_n.bound_vars.clone();
+                        let nnode = tree.nodes.get(&nid).unwrap();
+                        let new_path = cur_n.path.clone() + &tree.symbols.get_sym(&nnode.sym).unwrap().to_string() + &nnode.edge.to_string();
+                        bound_vars.push((id.clone(), tree.symbols.get_sym(&nnode.sym).unwrap().clone()));
+                        new_ntv.push(BindingVarState { nid, path: new_path.clone(), bound_vars });
+                    }
+                }
+                else
+                {
+                    let sym_id = tree.symbols.get_sid(&sym.to_string());
+                    match &node.edge
+                    {
+                        RellE::Exclusive(a_sid, a_nid) =>
+                            {
+                                if *a_sid == sym_id
+                                {
+                                    let nnode = tree.nodes.get(&a_nid).unwrap();
+                                    let new_path = cur_n.path.clone() + &tree.symbols.get_sym(&nnode.sym).unwrap().to_string() + &nnode.edge.to_string();
+                                    new_ntv.push(BindingVarState { nid: *a_nid, path: new_path.clone(), bound_vars: cur_n.bound_vars.clone() });
+                                }
+                            },
+                        RellE::NonExclusive(a_map) =>
+                            {
+                                if let Some(a_nid) = a_map.get(&sym_id)
+                                {
+                                    let nnode = tree.nodes.get(&a_nid).unwrap();
+                                    let new_path = cur_n.path.clone() + &tree.symbols.get_sym(&nnode.sym).unwrap().to_string() + &node.edge.to_string();
+                                    new_ntv.push(BindingVarState { nid: *a_nid, path: new_path.clone(), bound_vars: cur_n.bound_vars.clone() });
+                                }
+                            },
+                        _ => {}
+                    }
                 }
             }
+            println!("{:?}", new_ntv);
+            nodes_to_verify = new_ntv;
         }
-    }
-}
-
-#[derive(Debug)]
-pub struct BindingVar
-{
-    bound_value: Option<RellSymValue>,
-    path_to_parent: String,
-    nonex_iter_count: usize,
-    exclusive: bool,
-}
-impl BindingVar
-{
-    pub fn bind_to<'a>(&mut self, tree: &'a RellTree) -> Option<&'a RellN>
-    {
-        self.bound_value = None;
-        if let Some(q_result) = tree.query(&self.path_to_parent)
-        {
-            if self.bind(q_result, tree)
-            {
-                return Some(q_result);
-            }
-        }
-        None
-    }
-
-    pub fn bind(&mut self, node: &RellN, tree: &RellTree) -> bool
-    {
-        match (&node.edge, self.exclusive)
-        {
-            (RellE::Exclusive(sid, _nid), true) => 
-            {
-                self.bound_value = Some(tree.symbols.get_sym_table().get(&sid).unwrap().get_val().clone());
-                true
-            },
-            (RellE::NonExclusive(map), false) =>
-            {
-                let sid_opt = map.keys().skip(self.nonex_iter_count).next();
-
-                if let Some(sid) = sid_opt
-                {
-                    self.bound_value = Some(tree.symbols.get_sym_table().get(&sid).unwrap().get_val().clone());
-                    self.nonex_iter_count += 1;
-                };
-
-                sid_opt.is_some()
-            },
-            (_, _) =>
-            {
-                false
-            }
-        }
-    }
-
-    pub fn is_bound(&self) -> bool
-    {
-        self.bound_value.is_some()
-    }
-
-    pub fn is_unbound(&self) -> bool
-    {
-        !self.is_bound()      
+        nodes_to_verify
     }
 }
 
@@ -140,19 +116,22 @@ mod test
     fn test_binding() -> Result<()>
     {
         let mut bs = BindingState::new();
-        bs.add_bindable_statement("city.in.X")?;
+        bs.add_bindable_statement("X.in.Y")?;
 
-        let bs2 = BindingState::new();
-        bs.add_bindable_statement("city.in.X!Y")?;
+        // let bs2 = BindingState::new();
+        // bs.add_bindable_statement("city.in.X!Y")?;
 
         let mut w = RellTree::new();
         w.add_statement("city.in.state")?;
-        w.add_statement("city.in.country")?;
+        w.add_statement("state.in.country")?;
+        w.add_statement("other_state.in.country")?;
+        w.add_statement("nothing.important")?;
+        w.add_statement("something.in")?;
 
-        bs.init_binding_on_tree(&w);
-        println!("{:?}", bs.variables);
+        bs.init_binding_from_tree(&w);
 
-        //TODO: This are just a stub
+        //TODO: Write a real test :)
+        panic!("the disco!");
 
         Ok(())
     }

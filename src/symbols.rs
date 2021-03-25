@@ -1,4 +1,6 @@
 use std::collections::BTreeMap;
+use std::collections::btree_map::Iter;
+
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
@@ -6,26 +8,40 @@ use crate::rellcore::*;
 use crate::rellcore::errors::*;
 
 #[derive(Debug, PartialEq)]
+struct BindingState;
+
+#[derive(Debug, PartialEq)]
 pub struct SymbolsTable
 {
-    symbols: BTreeMap<SID, RellSym> 
+    symbols: BTreeMap<SID, RellSym>,
 }
-
 impl SymbolsTable
 {
     pub fn new() -> Self
     {
-        Self { symbols: BTreeMap::new() }
+        Self { symbols: BTreeMap::new(), }
     }
 
-    pub fn get_sym_table(&self) -> &BTreeMap<SID, RellSym>
+    pub fn get_sym(&self, sid: &SID) -> Option<&RellSym>
     {
-        &self.symbols
+        self.symbols.get(sid)
     }
 
-    pub fn get_sym_table_mut(&mut self) -> &mut BTreeMap<SID, RellSym>
+    pub fn get_sym_val(&self, sid: &SID) -> &RellSymValue
     {
-        &mut self.symbols
+        self.get_sym(sid).unwrap().get_val()
+    }
+
+    pub fn insert(&mut self, key: SID, value: RellSym) -> Option<RellSym>
+    {
+        // If insert finds a value already present with that key, it returns
+        // it as part of the insertion
+        self.symbols.insert(key, value)
+    }
+
+    pub fn symbols_iter(&self) -> Iter<SID, RellSym>
+    {
+        self.symbols.iter()
     }
 }
 

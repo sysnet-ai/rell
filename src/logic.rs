@@ -1,8 +1,7 @@
 use crate::rellcore::errors::*;
 use crate::tree::*;
 
-
-mod implications 
+mod implications
 {
     use super::*;
 
@@ -62,7 +61,7 @@ mod test
 
         let imp = implications::Implication::from_statements(vec!["city.in.state", "state.in.country"], vec!["city.in.country"])?;
 
-        assert!(imp.apply(&mut t), "Transtive implication did not trigger!");
+        assert!(imp.apply(&mut t), "Transitive implication did not trigger!");
 
         assert_eq!(format!("{}", t),
         "ROOT\n\
