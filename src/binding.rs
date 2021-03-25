@@ -4,11 +4,8 @@ use crate::rellcore::*;
 use crate::rellcore::errors::*;
 use crate::parser::*;
 use crate::tree::*;
+use crate::symbols::*;
 
-
-struct BindableStatement
-{
-}
 
 struct BindingState<'a>
 {
@@ -21,16 +18,18 @@ impl<'a> BindingState<'a>
     {
         Self { variables: BTreeMap::new(), nodes: BTreeMap::new() }
     }
+
     pub fn add_bindable_statement<S>(&mut self, statement: S) -> Result<()>
       where S: AsRef<str>
     {
-        let (statement_tree, syms) = RellParser::parse_simple_statement(statement, &RellTree::new())?; //TODO: Need to redo the SIDFactory trait
 
+        let mut sym_table = SymbolsTable::new();
+        let (statement_tree, syms) = RellParser::parse_simple_statement(statement, &sym_table)?; //TODO: Need to redo the SIDFactory trait
 
         let mut path_to_node = "".to_string();
         for (s_inx, sym) in syms.iter().enumerate()
         {
-            let is_var = if let RellSymValue::Identifier(_) = sym.val { true } else { false };
+            let is_var = if let RellSymValue::Identifier(_) = sym.get_val() { true } else { false };
 
             if is_var
             {
@@ -100,7 +99,7 @@ impl BindingVar
         {
             (RellE::Exclusive(sid, _nid), true) => 
             {
-                self.bound_value = Some(tree.symbols.get(&sid).unwrap().val.clone());
+                self.bound_value = Some(tree.symbols.get_sym_table().get(&sid).unwrap().get_val().clone());
                 true
             },
             (RellE::NonExclusive(map), false) =>
@@ -109,7 +108,7 @@ impl BindingVar
 
                 if let Some(sid) = sid_opt
                 {
-                    self.bound_value = Some(tree.symbols.get(&sid).unwrap().val.clone());
+                    self.bound_value = Some(tree.symbols.get_sym_table().get(&sid).unwrap().get_val().clone());
                     self.nonex_iter_count += 1;
                 };
 

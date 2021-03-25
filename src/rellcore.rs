@@ -2,8 +2,9 @@ use std::collections::BTreeMap;
 use std::hash::Hash;
 
 // CORE
-pub type NID = usize; // NODE ID
-pub type SID = u64; // SYMBOL ID
+pub type NID = usize; // NODE ID   (Monotonically increased from 1)
+pub type SID = u64;   // SYMBOL ID (Hashed from value)
+
 pub trait SIDGenerator
 {
     fn get_sid<S>(&self, sym:S) -> SID
@@ -63,38 +64,12 @@ impl RellN
     }
 }
 
-impl std::fmt::Display for RellN
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result
-    {
-        write!(f, "Node[{}]:", self.sym)?;
-        write!(f, "{}", self.edge)
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum RellE
 {
     Empty,
     NonExclusive(BTreeMap<SID, NID>),
     Exclusive(SID, NID),
-}
-impl std::fmt::Display for RellE
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result
-    {
-        match self
-        {
-            Self::Empty =>
-            {
-            },
-            Self::Exclusive(_sid, _nid) =>
-            {
-            },
-            _ => {}
-        }
-        write!(f, "NODE")
-    }
 }
 impl RellE
 {
@@ -148,14 +123,20 @@ pub enum RellSymValue
 #[derive(Debug, PartialEq, Clone)]
 pub struct RellSym
 {
-    pub val: RellSymValue,
+    val: RellSymValue,
+    pub binding_state: Option<u32>
 }
 
 impl RellSym
 {
+    pub fn new(val: RellSymValue) -> Self
+    {
+        Self { val, binding_state: None }
+    }
+
     pub fn get_display(&self) -> String
     {
-        match &self.val
+        match &self.get_val()
         {
             RellSymValue::Numeric(n) =>
             {
@@ -166,6 +147,23 @@ impl RellSym
                 s.to_string()
             }
         }
+    }
+
+    pub fn get_val(&self) -> &RellSymValue
+    {
+            if let RellSymValue::Identifier(_) = self.val
+            {
+                //  get value from binding state
+                match self.binding_state
+                {
+                    None => &self.val,
+                    Some(val) => &self.val
+                }
+            }
+            else
+            {
+                &self.val
+            }
     }
 }
 

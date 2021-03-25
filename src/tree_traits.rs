@@ -35,7 +35,7 @@ impl std::cmp::PartialOrd for RellTree
                 },
                 (RellE::Exclusive(b_sid, b_nid), RellE::Exclusive(a_sid, a_nid)) =>
                 {
-                    // If both are exclusive, they must have go to the same symbol
+                    // If both are exclusive, they must go to the same symbol
                     if b_sid != a_sid
                     {
                         return Some(std::cmp::Ordering::Greater);
@@ -55,7 +55,7 @@ impl std::cmp::PartialOrd for RellTree
                 },
                 (RellE::Empty, _) =>
                 {
-                    // B is a leaf, in A is not this is ok
+                    // Node is a leaf in B, Node is NOT a leaf in A - this is ok, carry on
                     continue
                 },
                 (_, _) =>
@@ -93,7 +93,7 @@ impl std::fmt::Display for RellTree
 
                 write!(f, "{}", tw)?;
             }
-            writeln!(f, "{}", self.symbols.get(&node.sym).unwrap())?;
+            writeln!(f, "{}", self.symbols.get_sym_table().get(&node.sym).unwrap())?;
 
             match &node.edge
             {

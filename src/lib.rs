@@ -1,6 +1,5 @@
 #![cfg_attr(feature = "cargo-clippy", allow(clippy::suspicious_else_formatting))]
 #![cfg_attr(feature = "cargo-clippy", allow(clippy::trivially_copy_pass_by_ref))]
-use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 pub mod rellcore;
@@ -14,18 +13,8 @@ use tree::*;
 pub mod tree_traits;
 
 pub mod logic;
+pub mod symbols;
 pub mod binding;
-
-impl SIDGenerator for RellTree
-{
-    fn get_sid<S>(&self, sym:S) -> SID
-        where S: AsRef<str>, S: Hash
-    {
-        let mut hasher = DefaultHasher::new();
-        sym.hash(&mut hasher);
-        hasher.finish()
-    }
-}
 
 #[cfg(test)]
 mod tests
@@ -33,6 +22,7 @@ mod tests
     use super::*;
     use crate::parser::*;
     use crate::rellcore::errors::*;
+    use crate::symbols::*;
 
     #[test]
     fn scanner_test()
@@ -62,7 +52,7 @@ mod tests
     #[test]
     fn tokenization()
     {
-        let w = RellTree::new();
+        let w = SymbolsTable::new();
         let expected = vec![ParseToken::Symbol(w.get_sid("brown"), 0, 5), ParseToken::Exclusive,
                             ParseToken::Symbol(w.get_sid("is"),    6, 8), ParseToken::EOL];
 
@@ -72,30 +62,30 @@ mod tests
     #[test]
     fn parse() -> Result<()>
     {
-        let w = RellTree::new();
+        let w = SymbolsTable::new();
         let err = RellParser::parse_simple_statement("brown..nope", &w);
         assert!(if let Err(Error::InvalidChar('.', 6)) = err { true } else { false }, "Result is: {:?}", err);
 
         let (_, syms) = RellParser::parse_simple_statement("brown.lastname.perez", &w)?;
 
         let expected = vec![
-            RellSym { val: RellSymValue::Literal("brown".to_string())    },
-            RellSym { val: RellSymValue::Literal("lastname".to_string()) },
-            RellSym { val: RellSymValue::Literal("perez".to_string())    }];
+            RellSym::new( RellSymValue::Literal("brown".to_string())    ),
+            RellSym::new( RellSymValue::Literal("lastname".to_string()) ),
+            RellSym::new( RellSymValue::Literal("perez".to_string())    )];
         assert_eq!(syms, expected, "{:?}", syms);
 
         let (_, syms2) = RellParser::parse_simple_statement("brown.height!50", &w)?;
         let expected2 = vec![
-            RellSym { val: RellSymValue::Literal("brown".to_string())    },
-            RellSym { val: RellSymValue::Literal("height".to_string()) },
-            RellSym { val: RellSymValue::Numeric(50.0)    }];
+            RellSym::new( RellSymValue::Literal("brown".to_string()) ),
+            RellSym::new( RellSymValue::Literal("height".to_string())),
+            RellSym::new( RellSymValue::Numeric(50.0)    )];
         assert_eq!(syms2, expected2, "{:?}", syms2);
 
         let (_, syms3) = RellParser::parse_simple_statement("brown.Height!50", &w)?;
         let expected3 = vec![
-            RellSym { val: RellSymValue::Literal("brown".to_string())    },
-            RellSym { val: RellSymValue::Identifier("Height".to_string()) },
-            RellSym { val: RellSymValue::Numeric(50.0)    }];
+            RellSym::new( RellSymValue::Literal("brown".to_string())    ),
+            RellSym::new( RellSymValue::Identifier("Height".to_string()) ),
+            RellSym::new( RellSymValue::Numeric(50.0)    )];
         assert_eq!(syms3, expected3, "{:?}", syms3);
 
 

@@ -3,12 +3,13 @@ use std::collections::BTreeMap;
 use crate::rellcore::*;
 use crate::rellcore::errors::*;
 use crate::parser::*;
+use crate::symbols::*;
 
 // TREE
 #[derive(Debug, PartialEq)]
 pub struct RellTree
 {
-    pub symbols: BTreeMap<SID, RellSym>, // SID -> Symbol Map
+    pub symbols: SymbolsTable, //BTreeMap<SID, RellSym>, // SID -> Symbol Map
     pub nodes:   BTreeMap<NID, RellN>,  // NID -> Node Map
     pub next_id: NID,
 }
@@ -19,10 +20,10 @@ impl RellTree
     pub fn new() -> Self
     {
         //
-        let mut ret = Self { symbols: BTreeMap::new(), nodes: BTreeMap::new(), next_id: Self::NID_ROOT + 1 };
-        let sid = ret.get_sid("ROOT");
+        let mut ret = Self { symbols: SymbolsTable::new(), nodes: BTreeMap::new(), next_id: Self::NID_ROOT + 1 };
+        let sid = ret.symbols.get_sid("ROOT");
         ret.nodes.insert(Self::NID_ROOT, RellN { edge: RellE::NonExclusive(BTreeMap::new()), sym: sid });
-        ret.symbols.insert(sid, RellSym { val: RellSymValue::Literal("ROOT".to_string()) }); // Incompatible trees have an empty GLB
+        ret.symbols.get_sym_table_mut().insert(sid, RellSym::new(RellSymValue::Literal("ROOT".to_string())));
         ret
     }
 
@@ -40,7 +41,7 @@ impl RellTree
         where S: AsRef<str>
     {
         let statement = statement.as_ref();
-        let (mut statement_tree, syms) = RellParser::parse_simple_statement(statement, self)?;
+        let (mut statement_tree, syms) = RellParser::parse_simple_statement(statement, &self.symbols)?;
 
         let (start_at, insert_nid) = {
 
@@ -102,7 +103,7 @@ impl RellTree
         where S: AsRef<str>
     {
         let statement = statement.as_ref();
-        let parsed_query = RellParser::tokenize(statement, self);
+        let parsed_query = RellParser::tokenize(statement, &self.symbols);
 
         if let Ok(query_tokens) = parsed_query
         {
@@ -130,23 +131,22 @@ impl RellTree
 
     fn add_symbol_instance(&mut self, sym: RellSym)
     {
-        let sid = match &sym.val
+        let sid = match &sym.get_val()
         {
             RellSymValue::Literal(ssym) =>
             {
-                self.get_sid(ssym)
+                self.symbols.get_sid(ssym)
             },
             RellSymValue::Numeric(num) =>
             {
-                self.get_sid(format!("{}", num)) // TODO: This feels a bit redundant
+                self.symbols.get_sid(format!("{}", num)) // TODO: This feels a bit redundant
             },
             RellSymValue::Identifier(ssym) =>
             {
                 panic!("Cannot add {} as a symbol - Upper case means unbound variable", ssym);
             }
         };
-        self.symbols.insert(sid, sym);
-
+        self.symbols.get_sym_table_mut().insert(sid, sym);
     }
 
     fn get_next_nid(&mut self) -> NID
@@ -193,7 +193,7 @@ impl RellTree
                         }
                         else
                         {
-                            // Symbol exists in only in A, so clone the sub-tree and be done
+                            // Symbol exists only in A, so clone the sub-tree and be done
                             glb.clone_subgraph_into(&glb_nid, self, a_nid, false).unwrap();
                         }
                     }
@@ -258,9 +258,9 @@ impl RellTree
         for sym_tbl in &[&self.symbols, &other.symbols]
         {
             //TODO: This just stomps all values, Ref counting?
-            for (sid, sym) in sym_tbl.iter()
+            for (sid, sym) in sym_tbl.get_sym_table().iter()
             {
-                glb.symbols.insert(*sid, sym.clone());
+                glb.symbols.get_sym_table_mut().insert(*sid, sym.clone());
             }
         }
 
@@ -292,7 +292,7 @@ impl RellTree
             else if let RellE::Exclusive(_, _) = insert_node.edge
             {
                 //If the insertion is non-exclusive, and the node is non-exclusive,
-                //insert(..) below should take care of it, but if its an excluxive
+                //insert(..) below should take care of it, but if its an exclusive
                 //edge... not sure how we should handle this one.
                 return Err(Error::CustomError("Trying to insert non-exclusively into an exclusive node".to_string()));
             }

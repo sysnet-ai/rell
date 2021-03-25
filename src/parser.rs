@@ -62,7 +62,7 @@ impl RellParser
                         // No need to check for invalid characters, that was done by the tokenizer
                         _ => { RellSymValue::Literal(sym.to_string()) }
                     };
-                    syms.push ( RellSym { val } )
+                    syms.push(RellSym::new(val))
                 },
                 err_tok => {
                     return Err(Error::CustomError(format!("Upstream Error: TOKENIZER - received unreasonable token sequence TOKEN: {:?} when expecting a SYMBOL", err_tok)));
