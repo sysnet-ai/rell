@@ -1,7 +1,5 @@
 #![cfg_attr(feature = "cargo-clippy", allow(clippy::suspicious_else_formatting))]
 #![cfg_attr(feature = "cargo-clippy", allow(clippy::trivially_copy_pass_by_ref))]
-use std::hash::{Hash, Hasher};
-
 pub mod rellcore;
 use rellcore::*;
 

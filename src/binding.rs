@@ -1,48 +1,102 @@
-use std::collections::BTreeMap;
-
 use crate::rellcore::*;
 use crate::rellcore::errors::*;
 use crate::parser::*;
 use crate::tree::*;
 use crate::symbols::*;
+use std::collections::BTreeMap;
 
-
-struct BindingState
-{
-    statements: Vec<(Vec<RellN>, Vec<RellSym>)>, // List of pre-parsed binding statements
-}
 #[derive(Debug)]
 struct BindingVarState
 {
     nid: NID,
     path: String,
-    bound_vars: Vec<(String, RellSym)>
+    bound_vars: Vec<(SID, SID)>
+}
+
+#[derive(Default)]
+struct BindingState
+{
+    binding_statements: BTreeMap<String, Option<Vec<BindingVarState>>>, // Pre-Bound Statement -> BindingState
 }
 impl BindingState
 {
-    pub fn new() -> Self
-    {
-        Self { statements: vec![] }
-    }
+    pub fn new() -> Self { Self::default() }
 
-    pub fn add_bindable_statement<S>(&mut self, statement: S) -> Result<()>
+    pub fn add_statement<S>(&mut self, statement: S) -> &mut Self
         where S: AsRef<str>
     {
-        let sym_table = SymbolsTable::new();
-        let parse_result = RellParser::parse_simple_statement(statement, &sym_table)?;
-        self.statements.push(parse_result);
-        Ok(())
+        let statement = statement.as_ref().to_string();
+        self.binding_statements.entry(statement).or_insert(None);
+        self
     }
 
-    pub fn init_binding_from_tree(&mut self, tree: &RellTree)
+    pub fn bind_all(&mut self, tree: &RellTree)
     {
-        for (_, stmnt_symbols) in &self.statements
+        let mut new_bs = BTreeMap::new();
+        for statement in self.binding_statements.keys()
         {
-            self.init_biniding_from_statement(tree, stmnt_symbols);
+            new_bs.insert(statement.clone(), Some(
+                self.bind_statement_to_tree(statement, tree).unwrap()
+            ));
         }
+        self.binding_statements = new_bs;
     }
 
-    pub fn init_biniding_from_statement(&self, tree: &RellTree, stmnt_symbols: &Vec<RellSym>) -> Vec<BindingVarState>
+    pub fn generate_compatible(&self) -> Vec<BTreeMap<SID, SID>>
+    {
+        let mut valid_dictionaries = vec![BTreeMap::new()];
+
+        for (_, binding_states) in &self.binding_statements
+        {
+            let mut new_valid_dicts = vec![];
+            while !valid_dictionaries.is_empty() && binding_states.is_some()
+            {
+                let cur_dic = valid_dictionaries.pop().unwrap();
+                let mut compatible = true;
+
+                for bs in binding_states.as_ref().unwrap()
+                {
+                    let mut cur_dic = cur_dic.clone();
+                    compatible = true;
+
+                    for (b_var_name, b_var_val) in &bs.bound_vars
+                    {
+                        compatible = match cur_dic.get(b_var_name)
+                        {
+                            Some(sid) => {
+                                sid == b_var_val
+                            },
+                            None => {
+                               cur_dic.insert(*b_var_name, *b_var_val);
+                               true
+                            }
+                        };
+
+                        if !compatible
+                        {
+                            break;
+                        }
+                    }
+                    if compatible
+                    {
+                        new_valid_dicts.push(cur_dic);
+                    }
+                }
+            }
+            valid_dictionaries = new_valid_dicts;
+        }
+
+        valid_dictionaries
+    }
+
+    fn bind_statement_to_tree<S>(&self, statement: S, tree: &RellTree) -> Result<Vec<BindingVarState>>
+        where S: AsRef<str>
+    {
+        let (_, parsed_symbols) = RellParser::parse_simple_statement(statement, &tree.symbols)?;
+        self.bind_parsed_statement_to_tree(tree, &parsed_symbols)
+    }
+
+    fn bind_parsed_statement_to_tree(&self, tree: &RellTree, stmnt_symbols: &[RellSym]) -> Result<Vec<BindingVarState>>
     {
         let mut var_states_to_visit = vec![BindingVarState { nid:  RellTree::NID_ROOT,
                                                              path: "".to_string(),
@@ -56,8 +110,7 @@ impl BindingState
                 let node = tree.nodes.get(&cur_n.nid).unwrap();
                 if let RellSymValue::Identifier(id) = sym.get_val()
                 {
-                    let nids = match &node.edge
-                    {
+                    let nids = match &node.edge {
                         RellE::Exclusive(_, a_nid) => vec![*a_nid],
                         RellE::NonExclusive(a_map) => a_map.values().cloned().collect(),
                         _                          =>  vec![]
@@ -65,12 +118,7 @@ impl BindingState
 
                     for nid in nids
                     {
-                        let mut bound_vars = cur_n.bound_vars.clone();
-                        let nnode = tree.nodes.get(&nid).unwrap();
-                        let nsym = tree.symbols.get_sym(&nnode.sym).unwrap();
-                        let new_path = cur_n.path.clone() + &nsym.to_string() + &nnode.edge.to_string();
-                        bound_vars.push((id.clone(), nsym.clone()));
-                        new_ntv.push(BindingVarState { nid, path: new_path.clone(), bound_vars });
+                        Self::binding_traversal_helper(&nid, tree, &cur_n.bound_vars, &cur_n.path, &mut new_ntv, Some(&tree.symbols.get_sid(id)))
                     }
                 }
                 else
@@ -82,28 +130,14 @@ impl BindingState
                         {
                             if *a_sid == sym_id
                             {
-                                let nnode = tree.nodes.get(&a_nid).unwrap();
-                                let new_path = cur_n.path.clone() +
-                                               &tree.symbols.get_sym(&nnode.sym).unwrap().to_string() +
-                                               &nnode.edge.to_string();
-
-                                new_ntv.push(BindingVarState { nid: *a_nid,
-                                                                     path: new_path.clone(),
-                                                                     bound_vars: cur_n.bound_vars.clone() });
+                                Self::binding_traversal_helper(&a_nid, tree, &cur_n.bound_vars, &cur_n.path, &mut new_ntv, None);
                             }
                         },
                         RellE::NonExclusive(a_map) =>
                         {
                             if let Some(a_nid) = a_map.get(&sym_id)
                             {
-                                let nnode = tree.nodes.get(&a_nid).unwrap();
-                                let new_path = cur_n.path.clone() +
-                                               &tree.symbols.get_sym(&nnode.sym).unwrap().to_string() +
-                                               &node.edge.to_string();
-
-                                new_ntv.push(BindingVarState { nid: *a_nid,
-                                                                     path: new_path.clone(),
-                                                                     bound_vars: cur_n.bound_vars.clone() });
+                                Self::binding_traversal_helper(&a_nid, tree, &cur_n.bound_vars, &cur_n.path, &mut new_ntv, None);
                             }
                         },
                         _ => {}
@@ -112,20 +146,28 @@ impl BindingState
             }
             var_states_to_visit = new_ntv;
         }
-        var_states_to_visit
+        Ok(var_states_to_visit)
+    }
+
+    fn binding_traversal_helper(nid: &NID, tree: &RellTree, bound_vars: &[(SID, SID)], path: &str, new_ntv: &mut Vec<BindingVarState>, id_opt: Option<&SID>)
+    {
+        let mut bound_vars = bound_vars.to_owned();
+        let nnode = tree.nodes.get(&nid).unwrap();
+        let nsym = tree.symbols.get_sym(&nnode.sym).unwrap();
+        let new_path = path.to_owned() + &nsym.to_string() + &nnode.edge.to_string();
+        if let Some(id)  = id_opt
+        {
+            bound_vars.push((*id, nnode.sym));
+        }
+        new_ntv.push(BindingVarState { nid: *nid, path: new_path, bound_vars });
     }
 }
 
 #[cfg(test)]
 mod test
 {
-    use super::*;
-    #[test]
-    fn test_binding() -> Result<()>
+    fn build_test_tree() -> Result<RellTree>
     {
-        let mut bs = BindingState::new();
-        bs.add_bindable_statement("X.in.Y")?;
-
         let mut w = RellTree::new();
         w.add_statement("city.in.state")?;
         w.add_statement("state.in.country")?;
@@ -133,10 +175,72 @@ mod test
         w.add_statement("nothing.important")?;
         w.add_statement("something.in")?;
 
-        println!("{:?}", bs.init_binding_from_tree(&w));
+        Ok(w)
+    }
 
-        //TODO: Write a real test :)
+    use super::*;
+    #[test]
+    fn test_binding() -> Result<()>
+    {
+        let w = build_test_tree()?;
+
+        let bs = BindingState::new();
+        let b_result_1 = bs.bind_statement_to_tree("X.in.Y", &w)?;
+        let b_result_2 = bs.bind_statement_to_tree("Y.in.Z", &w)?;
+
+        let expected_result_1 = vec![vec![("X", "state"), ("Y", "country")],
+                                     vec![("X", "city"),  ("Y", "state")],
+                                     vec![("X", "other_state"), ("Y", "country")]];
+        let expected_result_procd_1:Vec<Vec<(SID, SID)>> = expected_result_1.iter().map(|vars|
+            vars.iter().map( |(var_n, var_v)| { (w.symbols.get_sid(var_n), w.symbols.get_sid(var_v)) } ).collect()
+        ).collect();
+
+        let b_result_1_procd: Vec<Vec<(SID, SID)>> = b_result_1.iter().map(|bres| {
+            bres.bound_vars.iter().map(|(bvar_n, bvar_v)| (*bvar_n, *bvar_v)).collect()
+        }).collect();
+        assert_eq!(expected_result_procd_1, b_result_1_procd, "Incorrect result for binding to tree");
+
+        let expected_result_2 = vec![vec![("Y", "state"), ("Z", "country")],
+                                     vec![("Y", "city"),  ("Z", "state")],
+                                     vec![("Y", "other_state"), ("Z", "country")]];
+        let b_result_2_procd: Vec<Vec<(SID, SID)>> = b_result_2.iter().map(|bres| {
+            bres.bound_vars.iter().map(|(bvar_n, bvar_v)| (*bvar_n, *bvar_v)).collect()
+        }).collect();
+        let expected_result_procd_2:Vec<Vec<(SID, SID)>> = expected_result_2.iter().map(|vars|
+            vars.iter().map( |(var_n, var_v)| { (w.symbols.get_sid(var_n), w.symbols.get_sid(var_v)) } ).collect()
+        ).collect();
+        assert_eq!(expected_result_procd_2, b_result_2_procd, "Incorrect result for binding to tree");
 
         Ok(())
     }
+
+    #[test]
+    fn test_binding_state() -> Result<()>
+    {
+        let mut w = build_test_tree()?;
+        let mut bs = BindingState::new();
+        bs.add_statement("X.in.Y");
+        bs.add_statement("Y.in.Z");
+
+        let x_sid = w.symbols.get_sid("X");
+        let y_sid = w.symbols.get_sid("Y");
+        let z_sid = w.symbols.get_sid("Z");
+
+        // TODO: Not great to be doing this 'out of band'
+        w.symbols.insert(x_sid, RellSym::new(RellSymValue::Identifier("X".to_owned())));
+        w.symbols.insert(y_sid, RellSym::new(RellSymValue::Identifier("Y".to_owned())));
+        w.symbols.insert(z_sid, RellSym::new(RellSymValue::Identifier("Z".to_owned())));
+
+        bs.bind_all(&w);
+
+        let compabile_var_bindings = bs.generate_compatible();
+
+        assert_eq!(compabile_var_bindings.len(), 1, "Incorrect length for bindings result");
+        assert_eq!(*compabile_var_bindings[0].get(&x_sid).unwrap(), w.symbols.get_sid("city"), "Incorrect value for binding" );
+        assert_eq!(*compabile_var_bindings[0].get(&y_sid).unwrap(), w.symbols.get_sid("state"), "Incorrect value for binding" );
+        assert_eq!(*compabile_var_bindings[0].get(&z_sid).unwrap(), w.symbols.get_sid("country"), "Incorrect value for binding" );
+
+        Ok(())
+    }
+
 }

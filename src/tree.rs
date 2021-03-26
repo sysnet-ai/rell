@@ -563,12 +563,12 @@ mod test
         let mut t1 = RellTree::new();
         let mut t2 = RellTree::new();
 
-        t1.add_statement("a.b");
-        t1.add_statement("a.c");
-        t1.add_statement("a.d");
+        t1.add_statement("a.b")?;
+        t1.add_statement("a.c")?;
+        t1.add_statement("a.d")?;
 
-        t2.add_statement("a.b.d");
-        t2.add_statement("a.c.d");
+        t2.add_statement("a.b.d")?;
+        t2.add_statement("a.c.d")?;
 
         let glb = t1.greatest_lower_bound(&t2).unwrap();
 

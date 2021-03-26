@@ -5,22 +5,18 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 use crate::rellcore::*;
-use crate::rellcore::errors::*;
 
 #[derive(Debug, PartialEq)]
 struct BindingState;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Default, PartialEq)]
 pub struct SymbolsTable
 {
     symbols: BTreeMap<SID, RellSym>,
 }
 impl SymbolsTable
 {
-    pub fn new() -> Self
-    {
-        Self { symbols: BTreeMap::new(), }
-    }
+    pub fn new() -> Self { Self::default() }
 
     pub fn get_sym(&self, sid: &SID) -> Option<&RellSym>
     {
