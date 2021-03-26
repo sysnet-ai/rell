@@ -1,8 +1,6 @@
 use std::collections::BTreeMap;
 
 use crate::rellcore::*;
-
-
 use crate::rellcore::errors::{ Result, Error };
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -44,7 +42,7 @@ impl RellParser
                         err_tok => return Err(Error::CustomError(format!("Found Token {:?} after {:?}", err_tok, token))),
                     };
 
-                    nodes.push( RellN { edge, sym: sid } );
+                    nodes.push( RellN { edge, sym: sid, parent: RellN::NID_INVALID } );
 
                     let val = match sym.chars().next().unwrap()
                     {

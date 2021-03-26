@@ -41,10 +41,13 @@ use errors::{Result, Error};
 pub struct RellN
 {
     pub edge: RellE,
-    pub sym: SID
+    pub sym: SID,
+    pub parent: NID,
 }
 impl RellN
 {
+    pub const NID_INVALID: NID = 0;
+
     pub fn insert(&mut self, sid: &SID, nid: &NID)
     {
         self.edge.insert(sid, nid);
@@ -134,12 +137,12 @@ pub enum RellSymValue
     Literal(String),
     Identifier(String)
 }
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct RellSym
 {
     val: RellSymValue,
 }
-
 impl RellSym
 {
     pub fn new(val: RellSymValue) -> Self

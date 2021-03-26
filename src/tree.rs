@@ -16,13 +16,13 @@ pub struct RellTree
 
 impl RellTree
 {
-    pub const NID_ROOT: NID = 1;
+    pub const NID_ROOT: NID = RellN::NID_INVALID + 1;
     pub fn new() -> Self
     {
         //
         let mut ret = Self { symbols: SymbolsTable::new(), nodes: BTreeMap::new(), next_id: Self::NID_ROOT + 1 };
         let sid = ret.symbols.get_sid("ROOT");
-        ret.nodes.insert(Self::NID_ROOT, RellN { edge: RellE::NonExclusive(BTreeMap::new()), sym: sid });
+        ret.nodes.insert(Self::NID_ROOT, RellN { edge: RellE::NonExclusive(BTreeMap::new()), sym: sid, parent: RellN::NID_INVALID });
         ret.symbols.insert(sid, RellSym::new(RellSymValue::Literal("ROOT".to_string())));
         ret
     }
@@ -79,10 +79,13 @@ impl RellTree
         let new_nids:Vec<NID> = statement_tree.iter().skip(start_at).map(|_| self.get_next_nid()).collect();
 
         let mut new_r = self.nodes.get_mut(&insert_nid).unwrap();
+        let mut prev_nid = insert_nid;
         for (i, node) in statement_tree.iter_mut().skip(start_at).enumerate()
         {
             let new_nid = new_nids[i];
             new_r.insert(&node.sym, &new_nid);
+            node.parent = prev_nid;
+            prev_nid = new_nid;
             new_r = node;
         }
 
@@ -188,7 +191,7 @@ impl RellTree
                         {
                             // Symbol exists in both nodes, insert into glb and add them to the
                             // queue
-                            let new_nid = glb.insert_into(&glb_nid, RellN { edge: RellE::Empty, sym }, false).unwrap();
+                            let new_nid = glb.insert_into(&glb_nid, RellN { edge: RellE::Empty, sym, parent: glb_nid }, false).unwrap();
                             node_trios.push((*a_nid, *b_nid, new_nid))
                         }
                         else
@@ -230,7 +233,7 @@ impl RellTree
                     // If they both go to the same symbol add, else incompat
                     if a_sid == b_sid
                     {
-                        let new_nid = glb.insert_into(&glb_nid, RellN { edge: RellE::Empty, sym: *a_sid }, true).unwrap();
+                        let new_nid = glb.insert_into(&glb_nid, RellN { edge: RellE::Empty, sym: *a_sid, parent: glb_nid }, true).unwrap();
                         node_trios.push((*a_nid, *b_nid, new_nid));
                     }
                     else
@@ -248,7 +251,7 @@ impl RellTree
                         return None;
                     }
 
-                    let new_nid = glb.insert_into(&glb_nid, RellN { edge: RellE::Empty, sym: *x_sid }, true).unwrap();
+                    let new_nid = glb.insert_into(&glb_nid, RellN { edge: RellE::Empty, sym: *x_sid, parent: glb_nid }, true).unwrap();
                     node_trios.push((*x_nid, *nex_map.get(&x_sid).unwrap(), new_nid));
                 }
             }
@@ -308,7 +311,7 @@ impl RellTree
     {
         let sym = other_tree.nodes.get(from_n).unwrap().sym;
 
-        let new_subgraph_root = RellN { edge: RellE::Empty, sym };
+        let new_subgraph_root = RellN { edge: RellE::Empty, sym, parent: *into_n };
         let new_subgraph_nid = self.insert_into(into_n, new_subgraph_root, exclusive)?;
 
         let mut node_pairs = vec![(new_subgraph_nid, *from_n)];
@@ -322,7 +325,7 @@ impl RellTree
             {
                 &RellE::Exclusive(c_sid, c_nid) =>
                 {
-                    let new_node = RellN { edge: RellE::Empty, sym: c_sid };
+                    let new_node = RellN { edge: RellE::Empty, sym: c_sid, parent: self_nid };
                     let new_nid = self.insert_into(&self_nid, new_node, true)?;
                     node_pairs.push((new_nid, c_nid));
                 },
@@ -330,7 +333,7 @@ impl RellTree
                 {
                    for (&c_sid, &c_nid) in c_map
                     {
-                        let new_node = RellN { edge: RellE::Empty, sym: c_sid };
+                        let new_node = RellN { edge: RellE::Empty, sym: c_sid, parent: self_nid };
                         let new_nid = self.insert_into(&self_nid, new_node, false)?;
                         node_pairs.push((new_nid, c_nid));
                     }
@@ -529,6 +532,58 @@ mod test
                             ---d\n\
                             --a\n\
                             --c\n");
+        Ok(())
+    }
+
+    #[test]
+    fn test_parenthood() -> Result<()>
+    {
+        let mut t1 = RellTree::new();
+        let nids = t1.add_statement("a.b.c")?;
+
+        let node_a = t1.nodes.get(&nids[0]).unwrap();
+        let node_b = t1.nodes.get(&nids[1]).unwrap();
+        let node_c = t1.nodes.get(&nids[2]).unwrap();
+
+        assert_eq!(nids[1], node_c.parent,            "Node has incorrect parent after simple insertion");
+        assert_eq!(nids[0], node_b.parent,            "Node has incorrect parent after simple insertion");
+        assert_eq!(RellTree::NID_ROOT, node_a.parent, "Node has incorrect parent after simple insertion");
+
+        let d_nid = t1.add_statement("a.b.d")?[0];
+        let node_d = t1.nodes.get(&d_nid).unwrap();
+
+        assert_eq!(nids[1], node_d.parent, "Node has incorrect parent after NonExclusive insertion");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_glb_parenthood() -> Result<()>
+    {
+        let mut t1 = RellTree::new();
+        let mut t2 = RellTree::new();
+
+        t1.add_statement("a.b");
+        t1.add_statement("a.c");
+        t1.add_statement("a.d");
+
+        t2.add_statement("a.b.d");
+        t2.add_statement("a.c.d");
+
+        let glb = t1.greatest_lower_bound(&t2).unwrap();
+
+        let expected_symbols = ["d", "b", "a"];
+        let mut q_node = glb.query("a.b.d").unwrap();
+
+        for s in expected_symbols.iter()
+        {
+            let child_sym = glb.symbols.get_sym(&q_node.sym).unwrap();
+            assert_eq!(child_sym.to_string(), s.to_string(), "Incorrect symbol found while traversing tree in reverse");
+
+            let parent = glb.nodes.get(&q_node.parent).unwrap();
+            q_node = parent;
+        }
+
         Ok(())
     }
 }
