@@ -136,7 +136,7 @@ impl RellTree
     {
         let sid = match &sym.get_val()
         {
-            RellSymValue::Literal(ssym) =>
+            RellSymValue::Literal(ssym) | RellSymValue::Identifier(ssym) =>
             {
                 self.symbols.get_sid(ssym)
             },
@@ -144,10 +144,6 @@ impl RellTree
             {
                 self.symbols.get_sid(format!("{}", num)) // TODO: This feels a bit redundant
             },
-            RellSymValue::Identifier(ssym) =>
-            {
-                panic!("Cannot add {} as a symbol - Upper case means unbound variable", ssym);
-            }
         };
         self.symbols.insert(sid, sym);
     }
