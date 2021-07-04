@@ -233,14 +233,14 @@ mod test
 
         bs.bind_all(&w);
 
-        let mut compabile_var_bindings = bs.generate_compatible();
+        let mut compatible_var_bindings = bs.generate_compatible();
 
-        assert_eq!(compabile_var_bindings.len(), 1, "Incorrect length for bindings result");
-        assert_eq!(*compabile_var_bindings[0].get(&x_sid).unwrap(), w.symbols.get_sid("city"), "Incorrect value for binding" );
-        assert_eq!(*compabile_var_bindings[0].get(&y_sid).unwrap(), w.symbols.get_sid("state"), "Incorrect value for binding" );
-        assert_eq!(*compabile_var_bindings[0].get(&z_sid).unwrap(), w.symbols.get_sid("country"), "Incorrect value for binding" );
+        assert_eq!(compatible_var_bindings.len(), 1, "Incorrect length for bindings result");
+        assert_eq!(*compatible_var_bindings[0].get(&x_sid).unwrap(), w.symbols.get_sid("city"), "Incorrect value for binding" );
+        assert_eq!(*compatible_var_bindings[0].get(&y_sid).unwrap(), w.symbols.get_sid("state"), "Incorrect value for binding" );
+        assert_eq!(*compatible_var_bindings[0].get(&z_sid).unwrap(), w.symbols.get_sid("country"), "Incorrect value for binding" );
 
-        w.symbols.bind_variables(&mut compabile_var_bindings[0]);
+        w.symbols.bind_variables(&mut compatible_var_bindings[0]);
 
         assert_eq!(w.symbols.get_sym(&x_sid).unwrap().to_string(), "city");
         assert_eq!(w.symbols.get_sym(&y_sid).unwrap().to_string(), "state");
