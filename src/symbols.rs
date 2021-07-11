@@ -12,7 +12,7 @@ struct BindingState;
 #[derive(Debug, Default, PartialEq)]
 pub struct SymbolsTable
 {
-    symbols: BTreeMap<SID, RellSym>,
+    pub symbols: BTreeMap<SID, RellSym>,
     bound_variables: BTreeMap<SID, SID>
 }
 impl SymbolsTable
@@ -50,6 +50,7 @@ impl SymbolsTable
 
     pub fn bind_variables(&mut self, variable_values: &mut BTreeMap<SID, SID>)
     {
+        //TODO: Verify that actually only Identifiers are being bound
         self.bound_variables.append(variable_values);
     }
 

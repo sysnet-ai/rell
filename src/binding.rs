@@ -2,7 +2,6 @@ use crate::rellcore::*;
 use crate::rellcore::errors::*;
 use crate::parser::*;
 use crate::tree::*;
-use crate::symbols::*;
 use std::collections::BTreeMap;
 
 #[derive(Debug)]
@@ -14,7 +13,7 @@ struct BindingVarState
 }
 
 #[derive(Default)]
-struct BindingState
+pub struct BindingState
 {
     binding_statements: BTreeMap<String, Option<Vec<BindingVarState>>>, // Pre-Bound Statement -> BindingState
 }
@@ -46,7 +45,7 @@ impl BindingState
     {
         let mut valid_dictionaries = vec![BTreeMap::new()];
 
-        for (_, binding_states) in &self.binding_statements
+        for binding_states in self.binding_statements.values()
         {
             let mut new_valid_dicts = vec![];
             while !valid_dictionaries.is_empty() && binding_states.is_some()
@@ -226,11 +225,6 @@ mod test
         let y_sid = w.symbols.get_sid("Y");
         let z_sid = w.symbols.get_sid("Z");
 
-        // TODO: Not great to be doing this 'out of band'
-        w.symbols.insert(x_sid, RellSym::new(RellSymValue::Identifier("X".to_owned())));
-        w.symbols.insert(y_sid, RellSym::new(RellSymValue::Identifier("Y".to_owned())));
-        w.symbols.insert(z_sid, RellSym::new(RellSymValue::Identifier("Z".to_owned())));
-
         bs.bind_all(&w);
 
         let mut compatible_var_bindings = bs.generate_compatible();
@@ -247,6 +241,7 @@ mod test
         assert_eq!(w.symbols.get_sym(&z_sid).unwrap().to_string(), "country");
 
         assert_eq!(w.query("city.in.Y").unwrap().sym, w.symbols.get_sid("state"), "Incorrect substitution after variable binding");
+
         w.symbols.clear_bindings();
         assert!(w.query("city.in.Y").is_none(), "Incorrect result after binding clearing");
 
