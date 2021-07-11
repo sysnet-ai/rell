@@ -106,13 +106,9 @@ impl RellE
 
     pub fn is_compatible(&self, other: &Self) -> bool
     {
-        match (self, other)
-        {
-            (_, Self::Empty) => true,
-            (Self::NonExclusive(_), Self::NonExclusive(_)) => true,
-            (Self::Exclusive(_, _), Self::Exclusive(_, _)) => true,
-            _ => false,
-        }
+        matches!((self, other), (_, Self::Empty) |
+                                (Self::NonExclusive(_), Self::NonExclusive(_)) |
+                                (Self::Exclusive(_,_), Self::Exclusive(_,_)))
     }
 }
 impl std::fmt::Display for RellE

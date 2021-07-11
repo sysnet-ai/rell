@@ -12,7 +12,8 @@ struct BindingState;
 #[derive(Debug, Default, PartialEq)]
 pub struct SymbolsTable
 {
-    symbols: BTreeMap<SID, RellSym>,
+    pub symbols: BTreeMap<SID, RellSym>,
+    bound_variables: BTreeMap<SID, SID>
 }
 impl SymbolsTable
 {
@@ -20,7 +21,14 @@ impl SymbolsTable
 
     pub fn get_sym(&self, sid: &SID) -> Option<&RellSym>
     {
-        self.symbols.get(sid)
+        if let Some(bound_sid) = self.bound_variables.get(sid)
+        {
+            self.symbols.get(bound_sid)
+        }
+        else
+        {
+            self.symbols.get(sid)
+        }
     }
 
     pub fn get_sym_val(&self, sid: &SID) -> &RellSymValue
@@ -39,6 +47,17 @@ impl SymbolsTable
     {
         self.symbols.iter()
     }
+
+    pub fn bind_variables(&mut self, variable_values: &mut BTreeMap<SID, SID>)
+    {
+        //TODO: Verify that actually only Identifiers are being bound
+        self.bound_variables.append(variable_values);
+    }
+
+    pub fn clear_bindings(&mut self)
+    {
+        self.bound_variables = BTreeMap::new();
+    }
 }
 
 impl SIDGenerator for SymbolsTable
@@ -48,6 +67,15 @@ impl SIDGenerator for SymbolsTable
     {
         let mut hasher = DefaultHasher::new();
         sym.hash(&mut hasher);
-        hasher.finish()
+        let v = hasher.finish();
+
+        if let Some(other_sid) = self.bound_variables.get(&v)
+        {
+            *other_sid
+        }
+        else
+        {
+            v
+        }
     }
 }

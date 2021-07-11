@@ -1,7 +1,8 @@
 use crate::rellcore::errors::*;
 use crate::tree::*;
+use crate::binding::*;
 
-mod implications
+pub mod implications
 {
     use super::*;
 
@@ -45,12 +46,61 @@ mod implications
             }
         }
     }
+
+    pub struct BindableImplication
+    {
+        pub binding_state: BindingState,
+        pub posteriors: Vec<String>
+    }
+
+    impl BindableImplication
+    {
+        pub fn from_statements<S>(priors: Vec<S>, posteriors: Vec<S>) -> Result<Self>
+          where S: AsRef<str>
+        {
+            let mut binding_state = BindingState::new();
+
+            for prior in priors
+            {
+                binding_state.add_statement(prior);
+            }
+
+            let posteriors = posteriors.iter().map( | s | s.as_ref().to_string() ).collect();
+
+            Ok(Self { binding_state, posteriors })
+        }
+
+        pub fn apply(&mut self, tree: &mut RellTree) -> Result<bool>
+        {
+            self.binding_state.bind_all(&tree);
+
+            let mut compat_bindings = self.binding_state.generate_compatible();
+
+            if compat_bindings.is_empty()
+            {
+                Ok(false)
+            }
+            else
+            {
+                tree.symbols.bind_variables(&mut compat_bindings[0]); // TODO: What to do with multiple?
+                for posterior in &self.posteriors
+                {
+                    tree.add_statement(posterior)?;
+                }
+                tree.symbols.clear_bindings();
+                Ok(true)
+            }
+            
+        }
+
+    }
 }
 
 #[cfg(test)]
 mod test
 {
     use super::*;
+    use super::implications::*;
 
     #[test]
     fn test_apply() -> Result<()>
@@ -89,6 +139,24 @@ mod test
          -state\n\
          --in\n\
          ---country\n");
+
+        Ok(())
+    }
+
+    #[test]
+    fn bindable_logic() -> Result<()>
+    {
+        let mut w = RellTree::new(); 
+        w.add_statement("city.in.state")?;
+        w.add_statement("state.in.country")?;
+        w.add_statement("other_state.in.country")?;
+
+        let mut imp = BindableImplication::from_statements(
+                            vec!["X.in.Y", "Y.in.Z"],    // Implication Priors
+                            vec!["X.in.Z"])?;            // Posteriors
+
+        assert!(matches!(imp.apply(&mut w), Ok(t) if t));
+        assert!(w.query("city.in.country").is_some());   // Assert Posterior of Implication
 
         Ok(())
     }
