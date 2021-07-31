@@ -127,3 +127,88 @@ impl RellParser
         Ok(statement.len())
     }
 }
+
+#[cfg(test)]
+mod test
+{
+    use super::*;
+    use crate::symbols::*;
+    
+    #[test]
+    fn scanner_test()
+    {
+        assert_eq!(RellParser::find_next_eos("brown.is!happy", 0).unwrap(), 5);
+        assert_eq!(RellParser::find_next_eos("brown.is!happy", 6).unwrap(), 8);
+        assert_eq!(RellParser::find_next_eos("brown.is!happy", 9).unwrap(), 14);
+        assert_eq!(RellParser::find_next_eos("brown.is,", 0).unwrap(), 5);
+
+        // Error cases
+        {
+            let err = RellParser::find_next_eos("brown.is,happy", 6);
+            assert!(if let Err(Error::InvalidChar(',', 8)) = err { true } else { false }, "Result is: {:?}", err);
+        }
+
+        {
+            let err = RellParser::find_next_eos("brown@is.happy", 0);
+            assert!(if let Err(Error::InvalidChar('@', 5)) = err { true } else { false }, "Result is: {:?}", err);
+        }
+
+        {
+            let err = RellParser::find_next_eos("brown.is.", 6);
+            assert!(if let Err(Error::InvalidChar('.', 8)) = err { true } else { false }, "Result is: {:?}", err);
+        }
+    }
+
+    #[test]
+    fn tokenization()
+    {
+        let w = SymbolsTable::new();
+        let expected = vec![ParseToken::Symbol(w.get_sid("brown"), 0, 5), ParseToken::Exclusive,
+                            ParseToken::Symbol(w.get_sid("is"),    6, 8), ParseToken::EOL];
+
+        assert_eq!(expected, RellParser::tokenize("brown!is", &w).unwrap());
+    }
+
+    #[test]
+    fn parse() -> Result<()>
+    {
+        let w = SymbolsTable::new();
+        let err = RellParser::parse_simple_statement("brown..nope", &w);
+        assert!(if let Err(Error::InvalidChar('.', 6)) = err { true } else { false }, "Result is: {:?}", err);
+
+        let (_, syms) = RellParser::parse_simple_statement("brown.lastname.perez", &w)?;
+
+        let expected = vec![
+            RellSym::new( RellSymValue::Literal("brown".to_string())    ),
+            RellSym::new( RellSymValue::Literal("lastname".to_string()) ),
+            RellSym::new( RellSymValue::Literal("perez".to_string())    )];
+        assert_eq!(syms, expected, "{:?}", syms);
+
+        let (_, syms2) = RellParser::parse_simple_statement("brown.height!50", &w)?;
+        let expected2 = vec![
+            RellSym::new( RellSymValue::Literal("brown".to_string()) ),
+            RellSym::new( RellSymValue::Literal("height".to_string())),
+            RellSym::new( RellSymValue::Numeric(50.0)    )];
+        assert_eq!(syms2, expected2, "{:?}", syms2);
+
+        let (_, syms3) = RellParser::parse_simple_statement("brown.Height!50", &w)?;
+        let expected3 = vec![
+            RellSym::new( RellSymValue::Literal("brown".to_string())    ),
+            RellSym::new( RellSymValue::Identifier("Height".to_string()) ),
+            RellSym::new( RellSymValue::Numeric(50.0)    )];
+        assert_eq!(syms3, expected3, "{:?}", syms3);
+
+
+        let result = RellParser::parse_simple_statement("brown.height!5m", &w);
+        if let Err(Error::CustomError(_)) = result
+        {
+            Ok(())
+        }
+        else
+        {
+            Err(Error::CustomError(format!("Unexpected Result {:?}", result)))
+        }
+    }
+}
+
+
