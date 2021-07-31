@@ -9,7 +9,7 @@ struct BindingVarState
 {
     nid: NID,
     path: String,
-    bound_vars: Vec<(SID, SID)>
+    bound_vars: Vec<(SID, SID)>,
 }
 
 #[derive(Default)]
@@ -240,10 +240,10 @@ mod test
         assert_eq!(w.symbols.get_sym(&y_sid).unwrap().to_string(), "state");
         assert_eq!(w.symbols.get_sym(&z_sid).unwrap().to_string(), "country");
 
-        assert_eq!(w.query("city.in.Y").unwrap().sym, w.symbols.get_sid("state"), "Incorrect substitution after variable binding");
+        assert_eq!(w.get_at_path("city.in.Y").unwrap().sym, w.symbols.get_sid("state"), "Incorrect substitution after variable binding");
 
         w.symbols.clear_bindings();
-        assert!(w.query("city.in.Y").is_none(), "Incorrect result after binding clearing");
+        assert!(w.get_at_path("city.in.Y").is_none(), "Incorrect result after binding clearing");
 
         Ok(())
     }

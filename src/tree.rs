@@ -102,7 +102,7 @@ impl RellTree
         Ok(new_nids)
     }
 
-    pub fn query<S>(&self, statement: S) -> Option<&RellN>
+    pub fn get_at_path<S>(&self, statement: S) -> Option<&RellN>
         where S: AsRef<str>
     {
         let statement = statement.as_ref();
@@ -157,10 +157,9 @@ impl RellTree
     }
 }
 
-// GLB and LUB operations
+// Greatest Lower Bound - Union of Trees
 impl RellTree
 {
-    // Greatest Lower Bound - Union of Trees
     pub fn greatest_lower_bound(&self, other: &Self) -> Option<Self>
     {
         let mut glb = RellTree::new();
@@ -505,7 +504,7 @@ mod test
         let mut t = RellTree::new();
         t.add_statement("t")?;
         let node_id_of_statement = t.add_statement("t.15").unwrap()[0];
-        assert_eq!(t.query("t.15").unwrap(), t.nodes.get(&node_id_of_statement).unwrap());
+        assert_eq!(t.get_at_path("t.15").unwrap(), t.nodes.get(&node_id_of_statement).unwrap());
 
         assert!(t.add_statement("t!2").is_err(), "Numeric incompatible insertion being ignored");
 
@@ -569,7 +568,7 @@ mod test
         let glb = t1.greatest_lower_bound(&t2).unwrap();
 
         let expected_symbols = ["d", "b", "a"];
-        let mut q_node = glb.query("a.b.d").unwrap();
+        let mut q_node = glb.get_at_path("a.b.d").unwrap();
 
         for s in expected_symbols.iter()
         {
@@ -581,5 +580,35 @@ mod test
         }
 
         Ok(())
+    }
+
+    #[test]
+    fn baseline_verification() -> Result<()>
+    {
+        let mut w = RellTree::new();
+        w.add_statement("brown.is!happy")?;
+        w.add_statement("brown.knows.stuff")?;
+        w.add_statement("brown.knows.me")?;
+
+        assert_eq!(w.add_statement("brown.knows").unwrap(), vec![]); // Already know all of this info, nothing to insert
+        assert_eq!(w.add_statement("brown.is").unwrap(), vec![]);
+
+        w.add_statement("brown.is!sad")?;
+        let node_id_of_brownissadtoday = w.add_statement("brown.is!sad.today").unwrap()[0];
+        assert_eq!(w.get_at_path("brown.is!sad.today").unwrap(), w.nodes.get(&node_id_of_brownissadtoday).unwrap());
+        assert_eq!(w.get_at_path("brown.is.sad.today").unwrap(), w.nodes.get(&node_id_of_brownissadtoday).unwrap()); // !sad satifies .sad
+
+        assert!(w.get_at_path("brown.is!happy.today").is_none()); // !happy cant be satisfied by !sad
+        assert!(w.get_at_path("brown!is!sad.today").is_none()); // !is can't be satisfied by .is
+
+        let e = w.add_statement("brown.is.sad.today");
+        if let Err(Error::CustomError(_)) = e
+        {
+            Ok(())
+        }
+        else
+        {
+            Err(Error::CustomError(format!("Unexpected Result {:?}", e)))
+        }
     }
 }

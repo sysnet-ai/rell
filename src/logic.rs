@@ -156,7 +156,7 @@ mod test
                             vec!["X.in.Z"])?;            // Posteriors
 
         assert!(matches!(imp.apply(&mut w), Ok(t) if t));
-        assert!(w.query("city.in.country").is_some());   // Assert Posterior of Implication
+        assert!(w.get_at_path("city.in.country").is_some());   // Assert Posterior of Implication
 
         Ok(())
     }
