@@ -102,7 +102,7 @@ impl BindingState
                                                              bound_vars: vec![] }];
         for sym in stmnt_symbols
         {
-            let mut new_ntv = vec![];
+            let mut new_nodes_to_visit = vec![];
             while !var_states_to_visit.is_empty()
             {
                 let cur_n = var_states_to_visit.pop().unwrap();
@@ -117,7 +117,7 @@ impl BindingState
 
                     for nid in nids
                     {
-                        Self::binding_traversal_helper(&nid, tree, &cur_n.bound_vars, &cur_n.path, &mut new_ntv, Some(&tree.symbols.get_sid(id)))
+                        Self::binding_traversal_helper(&nid, tree, &cur_n.bound_vars, &cur_n.path, &mut new_nodes_to_visit, Some(&tree.symbols.get_sid(id)))
                     }
                 }
                 else
@@ -129,26 +129,27 @@ impl BindingState
                         {
                             if *a_sid == sym_id
                             {
-                                Self::binding_traversal_helper(&a_nid, tree, &cur_n.bound_vars, &cur_n.path, &mut new_ntv, None);
+                                Self::binding_traversal_helper(&a_nid, tree, &cur_n.bound_vars, &cur_n.path, &mut new_nodes_to_visit, None);
                             }
                         },
                         RellE::NonExclusive(a_map) =>
                         {
                             if let Some(a_nid) = a_map.get(&sym_id)
                             {
-                                Self::binding_traversal_helper(&a_nid, tree, &cur_n.bound_vars, &cur_n.path, &mut new_ntv, None);
+                                Self::binding_traversal_helper(&a_nid, tree, &cur_n.bound_vars, &cur_n.path, &mut new_nodes_to_visit, None);
                             }
                         },
                         _ => {}
                     }
                 }
             }
-            var_states_to_visit = new_ntv;
+            var_states_to_visit = new_nodes_to_visit;
         }
         Ok(var_states_to_visit)
     }
 
-    fn binding_traversal_helper(nid: &NID, tree: &RellTree, bound_vars: &[(SID, SID)], path: &str, new_ntv: &mut Vec<BindingVarState>, id_opt: Option<&SID>)
+    fn binding_traversal_helper(nid: &NID, tree: &RellTree, bound_vars: &[(SID, SID)], path: &str,
+                                new_nodes_to_visit: &mut Vec<BindingVarState>, id_opt: Option<&SID>)
     {
         let mut bound_vars = bound_vars.to_owned();
         let nnode = tree.nodes.get(&nid).unwrap();
@@ -158,7 +159,7 @@ impl BindingState
         {
             bound_vars.push((*id, nnode.sym));
         }
-        new_ntv.push(BindingVarState { nid: *nid, path: new_path, bound_vars });
+        new_nodes_to_visit.push(BindingVarState { nid: *nid, path: new_path, bound_vars });
     }
 }
 
@@ -244,7 +245,6 @@ mod test
 
         w.symbols.clear_bindings();
         assert!(w.get_at_path("city.in.Y").is_none(), "Incorrect result after binding clearing");
-        assert!(w.get_at_path("city.in.state").is_some(), "Posterior not triggering after clearing binding");
 
         Ok(())
     }
