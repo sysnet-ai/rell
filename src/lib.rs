@@ -38,19 +38,10 @@ mod tests
     {
         pub fn update(&mut self) -> Result<()>
         {
-            let mut need_update;
             loop
             {
                 debug!("Update Loop Starting");
-                need_update = false;
-                for implication in &mut self.rules
-                {
-                    if implication.apply(&mut self.world_tree)?
-                    {
-                        need_update = true;
-                    }
-                }
-                if !need_update
+                if !self.step()?
                 {
                     debug!("Update Loop Ending");
                     break;
@@ -58,6 +49,16 @@ mod tests
             }
             
             Ok(())
+        }
+
+        pub fn step(&mut self) -> Result<bool>
+        {
+            let mut need_update = false;
+            for implication in &mut self.rules
+            {
+                need_update |= implication.apply(&mut self.world_tree)?;
+            }
+            Ok(need_update)
         }
     }
 
@@ -86,6 +87,69 @@ mod tests
         assert!(rr.world_tree.get_at_path("place.in.state").is_some());   // Assert Posterior of Implication
         assert!(rr.world_tree.get_at_path("city.in.country").is_some());   // Assert Posterior of Implication
         assert!(rr.world_tree.get_at_path("place.in.country").is_some());   // Assert Posterior of Implication
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_goat() -> Result<()>
+    {
+        let _ = env_logger::builder().is_test(true).try_init();
+        
+        let mut w = RellTree::new();
+        w.add_statement("goat.in!left")?;
+        w.add_statement("cabagge.in!left")?;
+        w.add_statement("dog.in!left")?;
+        w.add_statement("man.in!left")?;
+
+        // If goat and cabbage in the same side, and man on the other
+        let goat_imp = implications::BindableImplication::from_statements(
+                                vec!["goat.in!X", "cabagge.in!X", "man.in!Y"],
+                                vec!["cabagge.is!eaten"])?;
+
+
+        // If goat and dog in the same side, and man on the other
+        let dog_imp = implications::BindableImplication::from_statements(
+                                vec!["dog.in!X", "goat.in!X", "man.in!Y"],
+                                vec!["goat.is!eaten"])?;
+
+        // Moving while holding something should move the thing
+        let mov_imp = implications::BindableImplication::from_statements(
+                            vec!["man.holds!X", "man.in!Z"],
+                            vec!["X.in!Z"])?;
+
+        let mut rr = RellRuntime { rules: vec![mov_imp, goat_imp, dog_imp], world_tree: w }; 
+        rr.update()?;
+
+        // Everyone is A-OK
+        assert!(rr.world_tree.get_at_path("goat.is!eaten").is_none());
+        assert!(rr.world_tree.get_at_path("cabagge.is!eaten").is_none());
+
+        // Man grabs goat and moves to the right
+        rr.world_tree.add_statement("man.holds!goat")?;
+        rr.world_tree.add_statement("man.in!right")?;
+        rr.update()?;
+
+        // Goat is right
+        assert!(rr.world_tree.get_at_path("goat.in!right").is_some());
+        // Everyone is alive
+        assert!(rr.world_tree.get_at_path("goat.is!eaten").is_none());
+        assert!(rr.world_tree.get_at_path("cabagge.is!eaten").is_none());
+
+        // Man moves back... Still holds goat 
+        rr.world_tree.add_statement("man.in!left")?;
+        rr.update()?;
+
+        // Goat back left
+        assert!(rr.world_tree.get_at_path("goat.in!left").is_some());
+
+        // Grab cabbage and move
+        rr.world_tree.add_statement("man.holds!cabagge")?;
+        rr.world_tree.add_statement("man.in!right")?;
+        rr.update()?;
+
+        // Goat is dead :( 
+        assert!(rr.world_tree.get_at_path("goat.is!eaten").is_some());
 
         Ok(())
     }

@@ -2,7 +2,7 @@ use crate::rellcore::*;
 use crate::rellcore::errors::*;
 use crate::parser::*;
 use crate::tree::*;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 #[derive(Debug)]
 struct BindingVarState
@@ -76,8 +76,21 @@ impl BindingState
                             break;
                         }
                     }
+
+                    compatible &=  {
+                        // Make sure no 2 variables have the same value
+                        // TODO: Should number vars be able to?
+                        let mut no_repeats = true;
+                        let mut used_vars = HashSet::new();
+                        for (_, value) in cur_dic.iter()
+                        {
+                            no_repeats &= used_vars.insert(value); 
+                        }
+                        no_repeats
+                    };
+                    
                     if compatible
-                    {
+                    { 
                         new_valid_dicts.push(cur_dic);
                     }
                 }

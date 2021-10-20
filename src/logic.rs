@@ -77,6 +77,7 @@ pub mod implications
             let mut compat_bindings = self.binding_state.generate_compatible();
 
             debug!("Compatible Bindings Found: {}", compat_bindings.len());
+            debug!("Compatible Bindings: {:?}", compat_bindings);
             let mut added = 0;
             for compat_binding in &mut compat_bindings
             {
