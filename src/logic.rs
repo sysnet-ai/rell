@@ -47,6 +47,7 @@ pub mod implications
         }
     }
 
+    #[derive(Debug)]
     pub struct BindableImplication
     {
         pub binding_state: BindingState,

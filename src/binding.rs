@@ -12,7 +12,7 @@ struct BindingVarState
     bound_vars: Vec<(SID, SID)>,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct BindingState
 {
     binding_statements: BTreeMap<String, Option<Vec<BindingVarState>>>, // Pre-Bound Statement -> BindingState
