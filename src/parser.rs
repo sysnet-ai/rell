@@ -42,7 +42,9 @@ impl RellParser
                         err_tok => return Err(Error::CustomError(format!("Found Token {:?} after {:?}", err_tok, token))),
                     };
 
-                    nodes.push( RellN { edge, sym: sid, parent: RellN::NID_INVALID } );
+                    let n = RellN { edge, sym: sid, parent: RellN::NID_INVALID };
+                    println!("{:?}", n);
+                    nodes.push(n);
 
                     let val = match sym.chars().next().unwrap()
                     {
@@ -60,6 +62,7 @@ impl RellParser
                         // No need to check for invalid characters, that was done by the tokenizer
                         _ => { RellSymValue::Literal(sym.to_string()) }
                     };
+                    println!("{:?}",val);
                     syms.push(RellSym::new(val))
                 },
                 err_tok => {
@@ -84,7 +87,9 @@ impl RellParser
             let sym = statement.get(scan..i_eos).unwrap();
             let sid = sidfactory.get_sid(&sym);
 
-            qt.push(ParseToken::Symbol(sid, scan, i_eos));
+            let pt = ParseToken::Symbol(sid, scan, i_eos);
+            println!("TOKEN: {:?}", pt);
+            qt.push(pt);
 
             qt.push(
                 match statement.get(i_eos..i_eos+1)

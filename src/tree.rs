@@ -136,7 +136,11 @@ impl RellTree
     {
         let sid = match &sym.get_val()
         {
-            RellSymValue::Literal(ssym) | RellSymValue::Identifier(ssym) =>
+            RellSymValue::Identifier(ssym) =>
+            {
+                self.symbols.get_sid_no_binding(ssym)
+            },
+            RellSymValue::Literal(ssym) =>
             {
                 self.symbols.get_sid(ssym)
             },

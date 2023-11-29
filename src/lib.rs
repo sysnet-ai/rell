@@ -20,7 +20,6 @@ pub mod query;
 pub mod symbols;
 
 use crate::logic::*;
-use crate::binding::*;
 use crate::rellcore::errors::*;
 
 pub mod runtime
@@ -77,12 +76,14 @@ pub mod runtime
             Ok(Self { binding_state: implications::BindableImplication::from_statements(prereqs, postconditions).unwrap() })
         }
 
-        pub fn call_func(&mut self, w: &mut RellTree) -> Result<()>
+        pub fn call_func_on<S>(&mut self, w: &mut RellTree, call_statement: S) -> Result<()> where S: AsRef<str>
         {
+            w.add_statement(call_statement)?;
             if self.binding_state.apply(w)?
             {
                 println!("Function call successful");
             }
+            w.add_statement("func!empty")?; // Dont really like this
             Ok(())
         }
     }
@@ -95,13 +96,12 @@ pub mod runtime
         #[test]
         fn base() -> Result<()>
         {
-            let mut f = RellFunction::from_statements("move.X.to.Y", vec!["X.in.Z"], vec!["X.in.Y"]).unwrap();
+            let mut f = RellFunction::from_statements("func!move.X.to.Y", vec!["X.in.Z"], vec!["X.in.Y"]).unwrap();
             let mut w = RellTree::new();
             w.add_statement("goat.in.right")?; // State
 
             // Calling
-            w.add_statement("move.goat.to.left")?;
-            f.call_func(&mut w)?;
+            f.call_func_on(&mut w, "func!move.goat.to.left")?;
             assert!(w.get_at_path("goat.in.left").is_some());
             Ok(())
         }
@@ -170,8 +170,8 @@ pub mod runtime
 
             // Moving while holding something should move the thing
             let mov_imp = implications::BindableImplication::from_statements(
-                                vec!["man.holds!X", "man.in!Z", "X.in!Y"],
-                                vec!["X.in!Z"])?;
+                                vec!["man.holds!O", "man.in!P", "O.in!D"],
+                                vec!["O.in!P"])?;
 
             let mut rr = RellRuntime { rules: vec![mov_imp, goat_imp, dog_imp], world_tree: w }; 
             rr.update()?;
@@ -181,15 +181,10 @@ pub mod runtime
             assert!(rr.world_tree.get_at_path("cabagge.is!eaten").is_none());
 
             // Man grabs goat and moves to the right
-            //rr.world_tree.add_statement("man.holds!goat")?;
-            //rr.world_tree.add_statement("man.in!right")?;
-            rr.world_tree.add_statement("func!grab.man.goat")?;
-            grab_f.call_func(&mut rr.world_tree)?;
-            rr.world_tree.add_statement("func!move.man.to.right")?;
-            move_f.call_func(&mut rr.world_tree)?;
+            grab_f.call_func_on(&mut rr.world_tree, "func!grab.man.goat")?;
+            move_f.call_func_on(&mut rr.world_tree, "func!move.man.to.right")?;
 
             rr.update()?;
-            println!("{}", rr.world_tree);
 
             // Goat is right
             assert!(rr.world_tree.get_at_path("goat.in!right").is_some());
@@ -198,9 +193,7 @@ pub mod runtime
             assert!(rr.world_tree.get_at_path("cabagge.is!eaten").is_none());
 
             // Man moves back... Still holds goat 
-            //rr.world_tree.add_statement("man.in!left")?;
-            rr.world_tree.add_statement("func!move.man.to.left")?;
-            move_f.call_func(&mut rr.world_tree)?;
+            move_f.call_func_on(&mut rr.world_tree, "func!move.man.to.left")?;
 
             rr.update()?;
 
@@ -208,20 +201,16 @@ pub mod runtime
             assert!(rr.world_tree.get_at_path("goat.in!left").is_some());
 
             // Grab cabbage and move
-            rr.world_tree.add_statement("func!grab.man.cabbage")?;
-            grab_f.call_func(&mut rr.world_tree)?;
-
-            rr.world_tree.add_statement("func!move.man.to.right")?;
-            move_f.call_func(&mut rr.world_tree)?;
+            grab_f.call_func_on(&mut rr.world_tree, "func!grab.man.cabagge")?;
+            move_f.call_func_on(&mut rr.world_tree, "func!move.man.to.right")?;
 
             rr.update()?;
 
-            println!("{:?}", rr.world_tree.symbols);
-            println!("{}", rr.world_tree);
             // Cabbage is right
-            assert!(rr.world_tree.get_at_path("cabbage.is!right").is_some());
+            assert!(rr.world_tree.get_at_path("cabagge.in!right").is_some());
             // Goat is dead :( 
             assert!(rr.world_tree.get_at_path("goat.is!eaten").is_some());
+
 
             Ok(())
         }
