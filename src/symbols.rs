@@ -6,9 +6,6 @@ use std::hash::{Hash, Hasher};
 
 use crate::rellcore::*;
 
-#[derive(Debug, PartialEq)]
-struct BindingState;
-
 #[derive(Debug, Default, PartialEq)]
 pub struct SymbolsTable
 {

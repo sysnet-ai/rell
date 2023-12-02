@@ -16,6 +16,7 @@ struct BindingVarState
 pub struct BindingState
 {
     binding_statements: BTreeMap<String, Option<Vec<BindingVarState>>>, // Pre-Bound Statement -> BindingState
+    is_bound: bool
 }
 impl BindingState
 {
@@ -29,8 +30,27 @@ impl BindingState
         self
     }
 
-    pub fn bind_all(&mut self, tree: &RellTree)
+    pub fn generate_compatible_on(&mut self, tree: &RellTree) -> Vec<BTreeMap<SID, SID>>
     {
+        self.bind_all(tree);
+        self.generate_compatible()
+    }
+
+    pub fn get_all_bound_paths_for<S>(&self, statement: S) -> Vec<String> where S: AsRef<str>
+    {
+        
+        match self.binding_statements.get(&statement.as_ref().to_string())
+        {
+            Some(Some(bound_variables)) => {
+               bound_variables.iter().map(|bvs| bvs.path.clone()).collect()
+            },
+            _ => vec![]
+        }
+    }
+
+    fn bind_all(&mut self, tree: &RellTree)
+    {
+        
         let mut new_bs = BTreeMap::new();
         for statement in self.binding_statements.keys()
         {
@@ -39,10 +59,16 @@ impl BindingState
             ));
         }
         self.binding_statements = new_bs;
+        self.is_bound = true;
     }
 
-    pub fn generate_compatible(&self) -> Vec<BTreeMap<SID, SID>>
+    fn generate_compatible(&self) -> Vec<BTreeMap<SID, SID>>
     {
+        if !self.is_bound
+        {
+            panic!("Unbound Binding State cannot be used to generate compatible bindings");
+        }
+        
         let mut valid_dictionaries = vec![BTreeMap::new()];
 
         for binding_states in self.binding_statements.values()
@@ -167,7 +193,12 @@ impl BindingState
         let mut bound_vars = bound_vars.to_owned();
         let nnode = tree.nodes.get(&nid).unwrap();
         let nsym = tree.symbols.get_sym(&nnode.sym).unwrap();
-        let new_path = path.to_owned() + &nsym.to_string() + &nnode.edge.to_string();
+        let new_path = path.to_owned() +
+            &nsym.to_string() +
+            &(match &nnode.edge {
+                RellE::Empty => "".to_string(),
+                other => other.to_string()
+            });
         if let Some(id)  = id_opt
         {
             bound_vars.push((*id, nnode.sym));
