@@ -36,6 +36,15 @@ impl SymbolsTable
         self.get_sym(sid).unwrap().get_val()
     }
 
+    pub fn get_sid_no_binding<S>(&self, sym: S) -> SID 
+        where S: AsRef<str>, S: Hash
+    {
+        let mut hasher = DefaultHasher::new();
+        sym.hash(&mut hasher);
+        let v = hasher.finish();
+        v
+    }
+
     pub fn insert(&mut self, key: SID, value: RellSym) -> Option<RellSym>
     {
         // If insert finds a value already present with that key, it returns

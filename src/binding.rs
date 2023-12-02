@@ -2,17 +2,17 @@ use crate::rellcore::*;
 use crate::rellcore::errors::*;
 use crate::parser::*;
 use crate::tree::*;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 #[derive(Debug)]
 struct BindingVarState
 {
     nid: NID,
     path: String,
-    bound_vars: Vec<(SID, SID)>
+    bound_vars: Vec<(SID, SID)>,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct BindingState
 {
     binding_statements: BTreeMap<String, Option<Vec<BindingVarState>>>, // Pre-Bound Statement -> BindingState
@@ -76,8 +76,21 @@ impl BindingState
                             break;
                         }
                     }
+
+                    compatible &=  {
+                        // Make sure no 2 variables have the same value
+                        // TODO: Should number vars be able to?
+                        let mut no_repeats = true;
+                        let mut used_vars = HashSet::new();
+                        for (_, value) in cur_dic.iter()
+                        {
+                            no_repeats &= used_vars.insert(value); 
+                        }
+                        no_repeats
+                    };
+                    
                     if compatible
-                    {
+                    { 
                         new_valid_dicts.push(cur_dic);
                     }
                 }
@@ -102,7 +115,7 @@ impl BindingState
                                                              bound_vars: vec![] }];
         for sym in stmnt_symbols
         {
-            let mut new_ntv = vec![];
+            let mut new_nodes_to_visit = vec![];
             while !var_states_to_visit.is_empty()
             {
                 let cur_n = var_states_to_visit.pop().unwrap();
@@ -117,7 +130,7 @@ impl BindingState
 
                     for nid in nids
                     {
-                        Self::binding_traversal_helper(&nid, tree, &cur_n.bound_vars, &cur_n.path, &mut new_ntv, Some(&tree.symbols.get_sid(id)))
+                        Self::binding_traversal_helper(&nid, tree, &cur_n.bound_vars, &cur_n.path, &mut new_nodes_to_visit, Some(&tree.symbols.get_sid(id)))
                     }
                 }
                 else
@@ -129,26 +142,27 @@ impl BindingState
                         {
                             if *a_sid == sym_id
                             {
-                                Self::binding_traversal_helper(&a_nid, tree, &cur_n.bound_vars, &cur_n.path, &mut new_ntv, None);
+                                Self::binding_traversal_helper(&a_nid, tree, &cur_n.bound_vars, &cur_n.path, &mut new_nodes_to_visit, None);
                             }
                         },
                         RellE::NonExclusive(a_map) =>
                         {
                             if let Some(a_nid) = a_map.get(&sym_id)
                             {
-                                Self::binding_traversal_helper(&a_nid, tree, &cur_n.bound_vars, &cur_n.path, &mut new_ntv, None);
+                                Self::binding_traversal_helper(&a_nid, tree, &cur_n.bound_vars, &cur_n.path, &mut new_nodes_to_visit, None);
                             }
                         },
                         _ => {}
                     }
                 }
             }
-            var_states_to_visit = new_ntv;
+            var_states_to_visit = new_nodes_to_visit;
         }
         Ok(var_states_to_visit)
     }
 
-    fn binding_traversal_helper(nid: &NID, tree: &RellTree, bound_vars: &[(SID, SID)], path: &str, new_ntv: &mut Vec<BindingVarState>, id_opt: Option<&SID>)
+    fn binding_traversal_helper(nid: &NID, tree: &RellTree, bound_vars: &[(SID, SID)], path: &str,
+                                new_nodes_to_visit: &mut Vec<BindingVarState>, id_opt: Option<&SID>)
     {
         let mut bound_vars = bound_vars.to_owned();
         let nnode = tree.nodes.get(&nid).unwrap();
@@ -158,7 +172,7 @@ impl BindingState
         {
             bound_vars.push((*id, nnode.sym));
         }
-        new_ntv.push(BindingVarState { nid: *nid, path: new_path, bound_vars });
+        new_nodes_to_visit.push(BindingVarState { nid: *nid, path: new_path, bound_vars });
     }
 }
 
@@ -240,10 +254,10 @@ mod test
         assert_eq!(w.symbols.get_sym(&y_sid).unwrap().to_string(), "state");
         assert_eq!(w.symbols.get_sym(&z_sid).unwrap().to_string(), "country");
 
-        assert_eq!(w.query("city.in.Y").unwrap().sym, w.symbols.get_sid("state"), "Incorrect substitution after variable binding");
+        assert_eq!(w.get_at_path("city.in.Y").unwrap().sym, w.symbols.get_sid("state"), "Incorrect substitution after variable binding");
 
         w.symbols.clear_bindings();
-        assert!(w.query("city.in.Y").is_none(), "Incorrect result after binding clearing");
+        assert!(w.get_at_path("city.in.Y").is_none(), "Incorrect result after binding clearing");
 
         Ok(())
     }

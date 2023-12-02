@@ -9,7 +9,7 @@ pub mod implications
     pub struct Implication
     {
         pub prior: RellTree,
-        pub posterior: RellTree 
+        pub posterior: RellTree
     }
 
     impl Implication
@@ -17,13 +17,13 @@ pub mod implications
         pub fn from_statements<S>(priors: Vec<S>, posteriors: Vec<S>) -> Result<Self>
           where S: AsRef<str>
         {
-            let mut prior = RellTree::new(); 
+            let mut prior = RellTree::new();
             for stmnt in priors
             {
                 prior.add_statement(stmnt)?;
             }
 
-            let mut posterior = RellTree::new(); 
+            let mut posterior = RellTree::new();
             for stmnt in posteriors
             {
                 posterior.add_statement(stmnt)?;
@@ -34,7 +34,7 @@ pub mod implications
 
         pub fn apply(&self, tree: &mut RellTree) -> bool
         {
-            if *tree < self.prior 
+            if *tree < self.prior
             {
                 *tree = tree.greatest_lower_bound(&self.posterior).unwrap();
                 true
@@ -47,6 +47,7 @@ pub mod implications
         }
     }
 
+    #[derive(Debug)]
     pub struct BindableImplication
     {
         pub binding_state: BindingState,
@@ -76,21 +77,20 @@ pub mod implications
 
             let mut compat_bindings = self.binding_state.generate_compatible();
 
-            if compat_bindings.is_empty()
+            debug!("Compatible Bindings Found: {}", compat_bindings.len());
+            debug!("Compatible Bindings: {:?}", compat_bindings);
+            let mut added = 0;
+            for compat_binding in &mut compat_bindings
             {
-                Ok(false)
-            }
-            else
-            {
-                tree.symbols.bind_variables(&mut compat_bindings[0]); // TODO: What to do with multiple?
+                tree.symbols.bind_variables(compat_binding);
                 for posterior in &self.posteriors
                 {
-                    tree.add_statement(posterior)?;
+                    let added_nids = tree.add_statement(posterior)?;
+                    added += added_nids.len();
                 }
                 tree.symbols.clear_bindings();
-                Ok(true)
             }
-            
+            Ok(added > 0)
         }
 
     }
@@ -146,7 +146,7 @@ mod test
     #[test]
     fn bindable_logic() -> Result<()>
     {
-        let mut w = RellTree::new(); 
+        let mut w = RellTree::new();
         w.add_statement("city.in.state")?;
         w.add_statement("state.in.country")?;
         w.add_statement("other_state.in.country")?;
@@ -156,7 +156,8 @@ mod test
                             vec!["X.in.Z"])?;            // Posteriors
 
         assert!(matches!(imp.apply(&mut w), Ok(t) if t));
-        assert!(w.query("city.in.country").is_some());   // Assert Posterior of Implication
+        assert!(matches!(imp.apply(&mut w), Ok(t) if !t)); // Applying again should do nothing
+        assert!(w.get_at_path("city.in.country").is_some());   // Assert Posterior of Implication
 
         Ok(())
     }

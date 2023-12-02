@@ -1,131 +1,218 @@
 #![cfg_attr(feature = "cargo-clippy", allow(clippy::suspicious_else_formatting))]
 #![cfg_attr(feature = "cargo-clippy", allow(clippy::trivially_copy_pass_by_ref))]
+
+#[macro_use]
+extern crate log;
+
 pub mod rellcore;
 use rellcore::*;
 
 pub mod parser;
 
 pub mod tree;
-use tree::*;
+use crate::tree::*;
 
 pub mod tree_traits;
 
-pub mod logic;
-pub mod symbols;
 pub mod binding;
+pub mod logic;
+pub mod query;
+pub mod symbols;
 
-#[cfg(test)]
-mod tests
+use crate::logic::*;
+use crate::rellcore::errors::*;
+
+pub mod runtime
 {
     use super::*;
-    use crate::parser::*;
-    use crate::rellcore::errors::*;
-    use crate::symbols::*;
 
-    #[test]
-    fn scanner_test()
+    pub struct RellRuntime
     {
-        assert_eq!(RellParser::find_next_eos("brown.is!happy", 0).unwrap(), 5);
-        assert_eq!(RellParser::find_next_eos("brown.is!happy", 6).unwrap(), 8);
-        assert_eq!(RellParser::find_next_eos("brown.is!happy", 9).unwrap(), 14);
-        assert_eq!(RellParser::find_next_eos("brown.is,", 0).unwrap(), 5);
-
-        // Error cases
-        {
-            let err = RellParser::find_next_eos("brown.is,happy", 6);
-            assert!(if let Err(Error::InvalidChar(',', 8)) = err { true } else { false }, "Result is: {:?}", err);
-        }
-
-        {
-            let err = RellParser::find_next_eos("brown@is.happy", 0);
-            assert!(if let Err(Error::InvalidChar('@', 5)) = err { true } else { false }, "Result is: {:?}", err);
-        }
-
-        {
-            let err = RellParser::find_next_eos("brown.is.", 6);
-            assert!(if let Err(Error::InvalidChar('.', 8)) = err { true } else { false }, "Result is: {:?}", err);
-        }
+        rules: Vec<implications::BindableImplication>,
+        world_tree: RellTree,
     }
 
-    #[test]
-    fn tokenization()
+    impl RellRuntime
     {
-        let w = SymbolsTable::new();
-        let expected = vec![ParseToken::Symbol(w.get_sid("brown"), 0, 5), ParseToken::Exclusive,
-                            ParseToken::Symbol(w.get_sid("is"),    6, 8), ParseToken::EOL];
-
-        assert_eq!(expected, RellParser::tokenize("brown!is", &w).unwrap());
-    }
-
-    #[test]
-    fn parse() -> Result<()>
-    {
-        let w = SymbolsTable::new();
-        let err = RellParser::parse_simple_statement("brown..nope", &w);
-        assert!(if let Err(Error::InvalidChar('.', 6)) = err { true } else { false }, "Result is: {:?}", err);
-
-        let (_, syms) = RellParser::parse_simple_statement("brown.lastname.perez", &w)?;
-
-        let expected = vec![
-            RellSym::new( RellSymValue::Literal("brown".to_string())    ),
-            RellSym::new( RellSymValue::Literal("lastname".to_string()) ),
-            RellSym::new( RellSymValue::Literal("perez".to_string())    )];
-        assert_eq!(syms, expected, "{:?}", syms);
-
-        let (_, syms2) = RellParser::parse_simple_statement("brown.height!50", &w)?;
-        let expected2 = vec![
-            RellSym::new( RellSymValue::Literal("brown".to_string()) ),
-            RellSym::new( RellSymValue::Literal("height".to_string())),
-            RellSym::new( RellSymValue::Numeric(50.0)    )];
-        assert_eq!(syms2, expected2, "{:?}", syms2);
-
-        let (_, syms3) = RellParser::parse_simple_statement("brown.Height!50", &w)?;
-        let expected3 = vec![
-            RellSym::new( RellSymValue::Literal("brown".to_string())    ),
-            RellSym::new( RellSymValue::Identifier("Height".to_string()) ),
-            RellSym::new( RellSymValue::Numeric(50.0)    )];
-        assert_eq!(syms3, expected3, "{:?}", syms3);
-
-
-        let result = RellParser::parse_simple_statement("brown.height!5m", &w);
-        if let Err(Error::CustomError(_)) = result
+        pub fn update(&mut self) -> Result<()>
         {
+            loop
+            {
+                debug!("Update Loop Starting");
+                if !self.step()?
+                {
+                    debug!("Update Loop Ending");
+                    break;
+                }
+            }
+            
             Ok(())
         }
-        else
+
+        pub fn step(&mut self) -> Result<bool>
         {
-            Err(Error::CustomError(format!("Unexpected Result {:?}", result)))
+            let mut need_update = false;
+            for implication in &mut self.rules
+            {
+                let r = implication.apply(&mut self.world_tree)?;
+                need_update |= r;
+            }
+            Ok(need_update)
         }
     }
 
-
-    #[test]
-    fn baseline_verification() -> Result<()>
+    pub struct RellFunction
     {
-        let mut w = RellTree::new();
-        w.add_statement("brown.is!happy")?;
-        w.add_statement("brown.knows.stuff")?;
-        w.add_statement("brown.knows.me")?;
+        binding_state: implications::BindableImplication
+    }
 
-        assert_eq!(w.add_statement("brown.knows").unwrap(), vec![]); // Already know all of this info, nothing to insert
-        assert_eq!(w.add_statement("brown.is").unwrap(), vec![]);
-
-        w.add_statement("brown.is!sad")?;
-        let node_id_of_brownissadtoday = w.add_statement("brown.is!sad.today").unwrap()[0];
-        assert_eq!(w.query("brown.is!sad.today").unwrap(), w.nodes.get(&node_id_of_brownissadtoday).unwrap());
-        assert_eq!(w.query("brown.is.sad.today").unwrap(), w.nodes.get(&node_id_of_brownissadtoday).unwrap()); // !sad satifies .sad
-
-        assert!(w.query("brown.is!happy.today").is_none()); // !happy cant be satisfied by !sad
-        assert!(w.query("brown!is!sad.today").is_none()); // !is can't be satisfied by .is
-
-        let e = w.add_statement("brown.is.sad.today");
-        if let Err(Error::CustomError(_)) = e
+    impl RellFunction
+    {
+        pub fn from_statements<S>(function_signature: S, prereqs: Vec<S>, postconditions: Vec<S>) -> Result<Self>
+            where S: AsRef<str> + Clone
         {
+            let mut prereqs = prereqs.clone();
+            prereqs.push(function_signature);
+            Ok(Self { binding_state: implications::BindableImplication::from_statements(prereqs, postconditions).unwrap() })
+        }
+
+        pub fn call_func_on<S>(&mut self, w: &mut RellTree, call_statement: S) -> Result<()> where S: AsRef<str>
+        {
+            w.add_statement(call_statement)?;
+            if self.binding_state.apply(w)?
+            {
+                println!("Function call successful");
+            }
+            w.add_statement("func!empty")?; // Dont really like this
             Ok(())
         }
-        else
+    }
+
+    #[cfg(test)]
+    mod test_func
+    {
+        use super::*;
+
+        #[test]
+        fn base() -> Result<()>
         {
-            Err(Error::CustomError(format!("Unexpected Result {:?}", e)))
+            let mut f = RellFunction::from_statements("func!move.X.to.Y", vec!["X.in.Z"], vec!["X.in.Y"]).unwrap();
+            let mut w = RellTree::new();
+            w.add_statement("goat.in.right")?; // State
+
+            // Calling
+            f.call_func_on(&mut w, "func!move.goat.to.left")?;
+            assert!(w.get_at_path("goat.in.left").is_some());
+            Ok(())
+        }
+    }
+
+    #[cfg(test)]
+    mod tests
+    {
+        use super::*;
+
+        #[test]
+        fn test_runtime() -> Result<()>
+        {
+            let _ = env_logger::builder().is_test(true).try_init();
+
+            let mut w = RellTree::new();
+            w.add_statement("place.in.city")?;
+            w.add_statement("city.in.state")?;
+            w.add_statement("state.in.country")?;
+            w.add_statement("other_state.in.country")?;
+            w.add_statement("nothing.important")?;
+            w.add_statement("something.in")?;
+
+
+            let imp = implications::BindableImplication::from_statements(
+                                vec!["X.in.Y", "Y.in.Z"],    // Implication Priors
+                                vec!["X.in.Z"])?;            // Posteriors
+
+            let mut rr = RellRuntime { rules: vec![imp], world_tree: w }; 
+
+            rr.update()?;
+
+            assert!(rr.world_tree.get_at_path("place.in.state").is_some());   // Assert Posterior of Implication
+            assert!(rr.world_tree.get_at_path("city.in.country").is_some());   // Assert Posterior of Implication
+            assert!(rr.world_tree.get_at_path("place.in.country").is_some());   // Assert Posterior of Implication
+
+            Ok(())
+        }
+
+        #[test]
+        fn test_goat() -> Result<()>
+        {
+            let _ = env_logger::builder().is_test(true).try_init();
+            
+            // Initial state
+            let mut w = RellTree::new();
+            w.add_statement("goat.in!left")?;
+            w.add_statement("cabagge.in!left")?;
+            w.add_statement("dog.in!left")?;
+            w.add_statement("man.in!left")?;
+
+            // Functions
+            let mut move_f = RellFunction::from_statements("func!move.X.to.Y", vec!["X.in!Z"], vec!["X.in!Y"]).unwrap();
+            let mut grab_f = RellFunction::from_statements("func!grab.Q.T", vec!["Q.in!H", "T.in!H"], vec!["Q.holds!T"]).unwrap();
+
+            // If goat and cabbage in the same side, and man on the other
+            let goat_imp = implications::BindableImplication::from_statements(
+                                    vec!["goat.in!X", "cabagge.in!X", "man.in!Y"],
+                                    vec!["cabagge.is!eaten"])?;
+
+
+            // If goat and dog in the same side, and man on the other
+            let dog_imp = implications::BindableImplication::from_statements(
+                                    vec!["dog.in!X", "goat.in!X", "man.in!Y"],
+                                    vec!["goat.is!eaten"])?;
+
+            // Moving while holding something should move the thing
+            let mov_imp = implications::BindableImplication::from_statements(
+                                vec!["man.holds!O", "man.in!P", "O.in!D"],
+                                vec!["O.in!P"])?;
+
+            let mut rr = RellRuntime { rules: vec![mov_imp, goat_imp, dog_imp], world_tree: w }; 
+            rr.update()?;
+
+            // Everyone is A-OK
+            assert!(rr.world_tree.get_at_path("goat.is!eaten").is_none());
+            assert!(rr.world_tree.get_at_path("cabagge.is!eaten").is_none());
+
+            // Man grabs goat and moves to the right
+            grab_f.call_func_on(&mut rr.world_tree, "func!grab.man.goat")?;
+            move_f.call_func_on(&mut rr.world_tree, "func!move.man.to.right")?;
+
+            rr.update()?;
+
+            // Goat is right
+            assert!(rr.world_tree.get_at_path("goat.in!right").is_some());
+            // Everyone is alive
+            assert!(rr.world_tree.get_at_path("goat.is!eaten").is_none());
+            assert!(rr.world_tree.get_at_path("cabagge.is!eaten").is_none());
+
+            // Man moves back... Still holds goat 
+            move_f.call_func_on(&mut rr.world_tree, "func!move.man.to.left")?;
+
+            rr.update()?;
+
+            // Goat back left
+            assert!(rr.world_tree.get_at_path("goat.in!left").is_some());
+
+            // Grab cabbage and move
+            grab_f.call_func_on(&mut rr.world_tree, "func!grab.man.cabagge")?;
+            move_f.call_func_on(&mut rr.world_tree, "func!move.man.to.right")?;
+
+            rr.update()?;
+
+            // Cabbage is right
+            assert!(rr.world_tree.get_at_path("cabagge.in!right").is_some());
+            // Goat is dead :( 
+            assert!(rr.world_tree.get_at_path("goat.is!eaten").is_some());
+
+
+            Ok(())
         }
     }
 }
