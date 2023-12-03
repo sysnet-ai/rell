@@ -117,9 +117,9 @@ impl std::fmt::Display for RellE
     {
         let s = match self
         {
-            Self::Empty =>           { ' ' },
-            Self::Exclusive(_, _) => { '!' },
-            Self::NonExclusive(_) => { '.' }
+            Self::Empty =>           { "" },
+            Self::Exclusive(_, _) => { "!" },
+            Self::NonExclusive(_) => { "." }
         };
 
         write!(formatter, "{}", s)

@@ -1,5 +1,4 @@
 use crate::RellTree;
-use std::collections::BTreeMap; 
 use crate::binding::*;
 
 pub struct QueryState

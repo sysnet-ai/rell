@@ -38,7 +38,6 @@ impl BindingState
 
     pub fn get_all_bound_paths_for<S>(&self, statement: S) -> Vec<String> where S: AsRef<str>
     {
-        
         match self.binding_statements.get(&statement.as_ref().to_string())
         {
             Some(Some(bound_variables)) => {
@@ -193,12 +192,7 @@ impl BindingState
         let mut bound_vars = bound_vars.to_owned();
         let nnode = tree.nodes.get(&nid).unwrap();
         let nsym = tree.symbols.get_sym(&nnode.sym).unwrap();
-        let new_path = path.to_owned() +
-            &nsym.to_string() +
-            &(match &nnode.edge {
-                RellE::Empty => "".to_string(),
-                other => other.to_string()
-            });
+        let new_path = path.to_owned() + &nsym.to_string() + &nnode.edge.to_string();
         if let Some(id)  = id_opt
         {
             bound_vars.push((*id, nnode.sym));
