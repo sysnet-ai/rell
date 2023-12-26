@@ -81,9 +81,9 @@ pub mod runtime
             w.add_statement(call_statement)?;
             if self.binding_state.apply(w)?
             {
-                println!("Function call successful");
+                debug!("Function call successful");
             }
-            w.add_statement("func!empty")?; // Dont really like this
+            w.remove_at_path("func")?;
             Ok(())
         }
     }
@@ -170,7 +170,7 @@ pub mod runtime
 
             // Moving while holding something should move the thing
             let mov_imp = implications::BindableImplication::from_statements(
-                                vec!["man.holds!O", "man.in!P", "O.in!D"],
+                                vec!["M.holds!O", "M.in!P", "O.in!D"],
                                 vec!["O.in!P"])?;
 
             let mut rr = RellRuntime { rules: vec![mov_imp, goat_imp, dog_imp], world_tree: w }; 
@@ -210,7 +210,6 @@ pub mod runtime
             assert!(rr.world_tree.get_at_path("cabagge.in!right").is_some());
             // Goat is dead :( 
             assert!(rr.world_tree.get_at_path("goat.is!eaten").is_some());
-
 
             Ok(())
         }

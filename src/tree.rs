@@ -132,6 +132,48 @@ impl RellTree
         None
     }
 
+    pub fn remove_at_path<S>(&mut self, statement: S) -> Result<Vec<RellN>> where S: AsRef<str>
+    {
+
+        let (parent_id, symbol_of_node) = if let Some(node) = self.get_at_path(statement)
+        {
+            (node.parent, node.sym)
+        }
+        else
+        {
+            return Err(Error::CustomError("Removing at non-existing path".to_string()));
+        };
+
+
+        let parent = self.nodes.get_mut(&parent_id).unwrap();
+        let nid = parent.remove(&symbol_of_node)?;
+
+        let deleted = self.nodes.remove(&nid).unwrap();
+        let mut all_deleted = vec![];
+        let mut to_delete = vec![deleted];
+
+        while !to_delete.is_empty() {
+            let ntd = to_delete.pop().unwrap();
+
+            match &ntd.edge {
+                RellE::Exclusive(_sid, nid) => {
+                    to_delete.push(self.nodes.remove(&nid).unwrap())
+                },
+                RellE::NonExclusive(node_map) => {
+                    node_map.iter().for_each(|(_sid, nid)| {
+                        to_delete.push(self.nodes.remove(&nid).unwrap());
+                    })
+                }
+                _ => {}
+            }
+            all_deleted.push(ntd);
+        }
+
+        // TODO: Should we delete all the symbols?
+
+        Ok(all_deleted)
+    }
+
     fn add_symbol_instance(&mut self, sym: RellSym)
     {
         let sid = match &sym.get_val()
@@ -519,8 +561,8 @@ mod test
         t2.add_statement("t.c")?;
         t2.add_statement("t.k.d")?;
 
-        println!("{}", t);
-        println!("{}", t2);
+        debug!("{}", t);
+        debug!("{}", t2);
         let glb = t.greatest_lower_bound(&t2).unwrap();
         assert_eq!(format!("{}", glb),
                            "ROOT\n\
@@ -614,5 +656,39 @@ mod test
         {
             Err(Error::CustomError(format!("Unexpected Result {:?}", e)))
         }
+    }
+
+    #[test]
+    fn overwriting() -> Result<()>
+    {
+
+        let mut w = RellTree::new();
+        w.add_statement("a.b!c")?;
+        w.add_statement("a.b!d")?;
+        assert!(w.get_at_path("a.b!d").is_some());
+        assert!(w.get_at_path("a.b!c").is_none());
+
+        Ok(())
+    }
+
+    #[test]
+    fn removing() -> Result<()>
+    {
+
+        let mut w = RellTree::new();
+        let added_nids = w.add_statement("a.b.c.d")?;
+        let removed_nodes = w.remove_at_path("a.b.c")?;
+
+        assert!(w.get_at_path("a.b.c.d").is_none(), "Path still reachable after delete");
+        assert!(w.get_at_path("a.b.c").is_none(), "Path still reachable after delete");
+        assert!(w.get_at_path("a.b").is_some(), "Path should be reachable");
+
+        added_nids.iter().skip(2).for_each(|nid| {
+            assert!(w.nodes.get(nid).is_none(), "Node still exists in Tree Map");
+        });
+
+        assert_eq!(removed_nodes.len(), 2, "Wrong number of nodes where deleted");
+
+        Ok(())
     }
 }

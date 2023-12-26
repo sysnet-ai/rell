@@ -53,6 +53,11 @@ impl RellN
         self.edge.insert(sid, nid);
     }
 
+    pub fn remove(&mut self, sid: &SID) -> Result<NID>
+    {
+        self.edge.remove(sid)
+    }
+
     pub fn upgrade(&mut self, to_edge: &RellE) -> Result<()>
     {
         match (&self.edge, to_edge)
@@ -95,6 +100,36 @@ impl RellE
             Self::Exclusive(sid, nid) => {
                 if *sid == *sidref { Some(&nid) }
                 else { None }
+            }
+        }
+    }
+
+    pub fn remove(&mut self, sid: &SID) -> Result<NID>
+    {
+        match self {
+            Self::Empty => { Err(Error::CustomError("Removing from Empty Edge".to_string())) },
+            Self::Exclusive(s, n) => {
+                let n = *n;
+                if s != sid
+                {
+                   Err(Error::CustomError("Removing a non exisiting connection from Exclusive Edge signals an issue upstream".to_string()))
+                }
+                else
+                {
+                    *self = Self::Empty;
+                    Ok(n)
+                }
+
+            },
+            Self::NonExclusive(connections) => {
+                if let Some(nid) = connections.remove(&sid)
+                {
+                    Ok(nid)
+                }
+                else
+                {
+                    Err(Error::CustomError("Removing non existing connection from NonExclusive Edge signals an issue upstream".to_string())) 
+                }
             }
         }
     }
@@ -173,4 +208,10 @@ impl std::fmt::Display for RellSym
     {
         write!(f, "{}", self.get_display())
     } 
+}
+
+
+#[cfg(test)]
+mod test
+{
 }
