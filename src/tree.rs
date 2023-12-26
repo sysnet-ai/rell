@@ -59,7 +59,7 @@ impl RellTree
 
                     if r.edge.is_incompatible(&node.edge)
                     {
-                        r.upgrade(&node.edge)?;
+                        r.upgrade(&node.edge);
                     }
                 }
                 else
@@ -146,7 +146,7 @@ impl RellTree
 
 
         let parent = self.nodes.get_mut(&parent_id).unwrap();
-        let nid = parent.remove(&symbol_of_node)?;
+        let nid = parent.remove(&symbol_of_node);
 
         let deleted = self.nodes.remove(&nid).unwrap();
         let mut all_deleted = vec![];
@@ -325,13 +325,13 @@ impl RellTree
 
         if exclusive
         {
-            insert_node.upgrade(&RellE::Exclusive(sid, new_nid))?;
+            insert_node.upgrade(&RellE::Exclusive(sid, new_nid));
         }
         else
         {
             if let RellE::Empty = insert_node.edge
             {
-                insert_node.upgrade(&RellE::NonExclusive(BTreeMap::new()))?;
+                insert_node.upgrade(&RellE::NonExclusive(BTreeMap::new()));
             }
             else if let RellE::Exclusive(_, _) = insert_node.edge
             {
@@ -402,8 +402,6 @@ mod test
         t.add_statement("a.f.e")?;
         t.add_statement("z.q.r")?;
         t.add_statement("z.x!p")?;
-
-        assert!(t.add_statement("z!y").is_err()); // Incompatible with z.*
 
         assert_eq!(
             format!("{}", t),
@@ -552,8 +550,6 @@ mod test
         let node_id_of_statement = t.add_statement("t.15").unwrap()[0];
         assert_eq!(t.get_at_path("t.15").unwrap(), t.nodes.get(&node_id_of_statement).unwrap());
 
-        assert!(t.add_statement("t!2").is_err(), "Numeric incompatible insertion being ignored");
-
         t.add_statement("t.a")?;
         t.add_statement("t.b")?;
 
@@ -647,15 +643,7 @@ mod test
         assert!(w.get_at_path("brown.is!happy.today").is_none()); // !happy cant be satisfied by !sad
         assert!(w.get_at_path("brown!is!sad.today").is_none()); // !is can't be satisfied by .is
 
-        let e = w.add_statement("brown.is.sad.today");
-        if let Err(Error::CustomError(_)) = e
-        {
-            Ok(())
-        }
-        else
-        {
-            Err(Error::CustomError(format!("Unexpected Result {:?}", e)))
-        }
+        Ok(())
     }
 
     #[test]
@@ -688,6 +676,8 @@ mod test
         });
 
         assert_eq!(removed_nodes.len(), 2, "Wrong number of nodes where deleted");
+
+        assert!(w.remove_at_path("non.existent").is_err());
 
         Ok(())
     }

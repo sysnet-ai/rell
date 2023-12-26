@@ -35,7 +35,6 @@ pub mod errors
         }
     }
 }
-use errors::{Result, Error};
 
 #[derive(Debug, PartialEq)]
 pub struct RellN
@@ -53,21 +52,20 @@ impl RellN
         self.edge.insert(sid, nid);
     }
 
-    pub fn remove(&mut self, sid: &SID) -> Result<NID>
+    pub fn remove(&mut self, sid: &SID) -> NID
     {
         self.edge.remove(sid)
     }
 
-    pub fn upgrade(&mut self, to_edge: &RellE) -> Result<()>
+    pub fn upgrade(&mut self, to_edge: &RellE)
     {
         match (&self.edge, to_edge)
         {
             (&RellE::Empty, other) =>
             {
                 self.edge = other.clone();
-                Ok(())
             },
-            (_, _) => Err(Error::CustomError(format!("CANT UPGRADE {:?} TO {:?}", self.edge, to_edge)))
+            (_, _) => panic!("Cant Upgrade {:?} TO {:?}", self.edge, to_edge)
         }
     }
 }
@@ -104,31 +102,30 @@ impl RellE
         }
     }
 
-    pub fn remove(&mut self, sid: &SID) -> Result<NID>
+    pub fn remove(&mut self, sid: &SID) -> NID
     {
         match self {
-            Self::Empty => { Err(Error::CustomError("Removing from Empty Edge".to_string())) },
+            Self::Empty => { panic!("Removing from Empty Edge") },
             Self::Exclusive(s, n) => {
                 let n = *n;
                 if s != sid
                 {
-                   Err(Error::CustomError("Removing a non exisiting connection from Exclusive Edge signals an issue upstream".to_string()))
+                   panic!("Removing a non exisiting connection from Exclusive Edge signals an issue upstream");
                 }
                 else
                 {
                     *self = Self::Empty;
-                    Ok(n)
+                    n
                 }
-
             },
             Self::NonExclusive(connections) => {
                 if let Some(nid) = connections.remove(&sid)
                 {
-                    Ok(nid)
+                    nid
                 }
                 else
                 {
-                    Err(Error::CustomError("Removing non existing connection from NonExclusive Edge signals an issue upstream".to_string())) 
+                    panic!("Removing non existing connection from NonExclusive Edge signals an issue upstream"); 
                 }
             }
         }
