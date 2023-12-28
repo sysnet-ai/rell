@@ -1,33 +1,34 @@
 #![cfg_attr(feature = "cargo-clippy", allow(clippy::suspicious_else_formatting))]
 #![cfg_attr(feature = "cargo-clippy", allow(clippy::trivially_copy_pass_by_ref))]
 
+use std::collections::BTreeMap;
+
 #[macro_use]
 extern crate log;
 
 pub mod rellcore;
-use rellcore::*;
 
 pub mod parser;
-
 pub mod tree;
-use crate::tree::*;
-
 pub mod tree_traits;
-
 pub mod binding;
 pub mod logic;
 pub mod query;
 pub mod symbols;
 
+use crate::tree::*;
 use crate::logic::*;
 use crate::rellcore::errors::*;
+use rellcore::*;
 
 pub mod runtime
 {
     use super::*;
-
+    
+    #[derive(Default)]
     pub struct RellRuntime
     {
+        _functions: BTreeMap<String, RellFunction>,
         rules: Vec<implications::BindableImplication>,
         world_tree: RellTree,
     }
@@ -58,6 +59,12 @@ pub mod runtime
                 need_update |= r;
             }
             Ok(need_update)
+        }
+
+        pub fn call_function() -> Result<()>
+        {
+            // TODO: 
+            Ok(())
         }
     }
 
@@ -96,6 +103,7 @@ pub mod runtime
         #[test]
         fn base() -> Result<()>
         {
+            let _ = env_logger::builder().is_test(true).try_init();
             let mut f = RellFunction::from_statements("func!move.X.to.Y", vec!["X.in.Z"], vec!["X.in.Y"]).unwrap();
             let mut w = RellTree::new();
             w.add_statement("goat.in.right")?; // State
@@ -130,7 +138,7 @@ pub mod runtime
                                 vec!["X.in.Y", "Y.in.Z"],    // Implication Priors
                                 vec!["X.in.Z"])?;            // Posteriors
 
-            let mut rr = RellRuntime { rules: vec![imp], world_tree: w }; 
+            let mut rr = RellRuntime { rules: vec![imp], world_tree: w, _functions: BTreeMap::new() }; 
 
             rr.update()?;
 
@@ -173,7 +181,7 @@ pub mod runtime
                                 vec!["M.holds!O", "M.in!P", "O.in!D"],
                                 vec!["O.in!P"])?;
 
-            let mut rr = RellRuntime { rules: vec![mov_imp, goat_imp, dog_imp], world_tree: w }; 
+            let mut rr = RellRuntime { rules: vec![mov_imp, goat_imp, dog_imp], world_tree: w, _functions: BTreeMap::new() }; 
             rr.update()?;
 
             // Everyone is A-OK

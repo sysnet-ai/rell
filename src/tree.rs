@@ -59,7 +59,17 @@ impl RellTree
 
                     if r.edge.is_incompatible(&node.edge)
                     {
-                        r.upgrade(&node.edge);
+                        if let RellE::Empty = r.edge  
+                        {
+                            r.upgrade(&node.edge);
+                        }
+                        else
+                        {
+                            return Err(Error::CustomError(format!("Can't upgrade from {}{} to {}{} while inserting {}",
+                                        self.symbols.get_sym(&r.sym).unwrap(), r.edge,
+                                        self.symbols.get_sym(&node.sym).unwrap(), node.edge,
+                                        statement)));
+                        }
                     }
                 }
                 else
@@ -549,6 +559,7 @@ mod test
         t.add_statement("t")?;
         let node_id_of_statement = t.add_statement("t.15").unwrap()[0];
         assert_eq!(t.get_at_path("t.15").unwrap(), t.nodes.get(&node_id_of_statement).unwrap());
+        assert!(t.add_statement("t!2").is_err());
 
         t.add_statement("t.a")?;
         t.add_statement("t.b")?;
@@ -642,6 +653,8 @@ mod test
 
         assert!(w.get_at_path("brown.is!happy.today").is_none()); // !happy cant be satisfied by !sad
         assert!(w.get_at_path("brown!is!sad.today").is_none()); // !is can't be satisfied by .is
+
+        assert!(w.add_statement("brown.is.extatic").is_err());
 
         Ok(())
     }

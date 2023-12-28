@@ -59,6 +59,7 @@ impl BindingState
         }
         self.binding_statements = new_bs;
         self.is_bound = true;
+        debug!("{:?}", self.binding_statements);
     }
 
     fn generate_compatible(&self) -> Vec<BTreeMap<SID, SID>>
@@ -264,9 +265,7 @@ mod test
         let y_sid = w.symbols.get_sid("Y");
         let z_sid = w.symbols.get_sid("Z");
 
-        bs.bind_all(&w);
-
-        let mut compatible_var_bindings = bs.generate_compatible();
+        let mut compatible_var_bindings = bs.generate_compatible_on(&w);
 
         assert_eq!(compatible_var_bindings.len(), 1, "Incorrect length for bindings result");
         assert_eq!(*compatible_var_bindings[0].get(&x_sid).unwrap(), w.symbols.get_sid("city"), "Incorrect value for binding" );
@@ -286,5 +285,4 @@ mod test
 
         Ok(())
     }
-
 }
