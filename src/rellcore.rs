@@ -47,6 +47,11 @@ impl RellN
 {
     pub const NID_INVALID: NID = 0;
 
+    pub fn get<'a>(&'a self, sidref: &SID) -> Option<&'a NID>
+    {
+        self.edge.get(&sidref)
+    }
+
     pub fn insert(&mut self, sid: &SID, nid: &NID)
     {
         self.edge.insert(sid, nid);

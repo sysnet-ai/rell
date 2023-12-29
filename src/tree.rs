@@ -9,7 +9,7 @@ use crate::symbols::*;
 #[derive(Debug, PartialEq)]
 pub struct RellTree
 {
-    pub symbols: SymbolsTable, //BTreeMap<SID, RellSym>, // SID -> Symbol Map
+    pub symbols: SymbolsTable, // SID -> Symbol Map
     pub nodes:   BTreeMap<NID, RellN>,  // NID -> Node Map
     pub next_id: NID,
 }
@@ -52,7 +52,7 @@ impl RellTree
 
             for (i, node) in statement_tree.iter().enumerate()
             {
-                if let Some(nid) = r.edge.get(&node.sym)
+                if let Some(nid) = r.get(&node.sym)
                 {
                     insert_nid = *nid;
                     r = self.nodes.get_mut(&insert_nid).unwrap();
@@ -116,30 +116,25 @@ impl RellTree
         where S: AsRef<str>
     {
         let statement = statement.as_ref();
-        let parsed_query = RellParser::tokenize(statement, &self.symbols);
+        let (statement_tree, _) = RellParser::parse_simple_statement(statement, &self.symbols).unwrap();
 
-        if let Ok(query_tokens) = parsed_query
+        let mut curr = self.get_root();
+        for n in &statement_tree
         {
-            let mut r = self.get_root();
-            for t in query_tokens
+            match curr.get(&n.sym)
             {
-                match (t, &r.edge)
-                {
-                    (ParseToken::Symbol(sid, _, _), edge) => if let Some(nid) = edge.get(&sid)
+                Some(nid) =>{
+                    curr = self.nodes.get(&nid).unwrap();
+                    match (&curr.edge, &n.edge)
                     {
-                        r = self.nodes.get(&nid).unwrap();
+                        (RellE::NonExclusive(_), RellE::Exclusive(_, _)) => return None,
+                        (_,_) => {}
                     }
-                    else
-                    {
-                        return None;
-                    },
-                    (ParseToken::Exclusive, RellE::NonExclusive(_)) => { return None; },
-                    (_,_) => {},
                 }
+                _ => return None
             }
-            return Some(r);
         }
-        None
+        return Some(&curr);
     }
 
     pub fn remove_at_path<S>(&mut self, statement: S) -> Result<Vec<RellN>> where S: AsRef<str>
@@ -638,6 +633,8 @@ mod test
     #[test]
     fn baseline_verification() -> Result<()>
     {
+        
+        let _ = env_logger::builder().is_test(true).try_init();
         let mut w = RellTree::new();
         w.add_statement("brown.is!happy")?;
         w.add_statement("brown.knows.stuff")?;
