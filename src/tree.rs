@@ -9,7 +9,7 @@ use crate::symbols::*;
 #[derive(Debug, PartialEq)]
 pub struct RellTree
 {
-    pub symbols: SymbolsTable, //BTreeMap<SID, RellSym>, // SID -> Symbol Map
+    pub symbols: SymbolsTable, // SID -> Symbol Map
     pub nodes:   BTreeMap<NID, RellN>,  // NID -> Node Map
     pub next_id: NID,
 }
@@ -52,14 +52,24 @@ impl RellTree
 
             for (i, node) in statement_tree.iter().enumerate()
             {
-                if let Some(nid) = r.edge.get(&node.sym)
+                if let Some(nid) = r.get(&node.sym)
                 {
                     insert_nid = *nid;
                     r = self.nodes.get_mut(&insert_nid).unwrap();
 
                     if r.edge.is_incompatible(&node.edge)
                     {
-                        r.upgrade(&node.edge)?;
+                        if let RellE::Empty = r.edge  
+                        {
+                            r.upgrade(&node.edge);
+                        }
+                        else
+                        {
+                            return Err(Error::CustomError(format!("Can't upgrade from {}{} to {}{} while inserting {}",
+                                        self.symbols.get_sym(&r.sym).unwrap(), r.edge,
+                                        self.symbols.get_sym(&node.sym).unwrap(), node.edge,
+                                        statement)));
+                        }
                     }
                 }
                 else
@@ -106,30 +116,67 @@ impl RellTree
         where S: AsRef<str>
     {
         let statement = statement.as_ref();
-        let parsed_query = RellParser::tokenize(statement, &self.symbols);
+        let (statement_tree, _) = RellParser::parse_simple_statement(statement, &self.symbols).unwrap();
 
-        if let Ok(query_tokens) = parsed_query
+        let mut curr = self.get_root();
+        for n in &statement_tree
         {
-            let mut r = self.get_root();
-            for t in query_tokens
+            match curr.get(&n.sym)
             {
-                match (t, &r.edge)
-                {
-                    (ParseToken::Symbol(sid, _, _), edge) => if let Some(nid) = edge.get(&sid)
+                Some(nid) =>{
+                    curr = self.nodes.get(&nid).unwrap();
+                    match (&curr.edge, &n.edge)
                     {
-                        r = self.nodes.get(&nid).unwrap();
+                        (RellE::NonExclusive(_), RellE::Exclusive(_, _)) => return None,
+                        (_,_) => {}
                     }
-                    else
-                    {
-                        return None;
-                    },
-                    (ParseToken::Exclusive, RellE::NonExclusive(_)) => { return None; },
-                    (_,_) => {},
                 }
+                _ => return None
             }
-            return Some(r);
         }
-        None
+        return Some(&curr);
+    }
+
+    pub fn remove_at_path<S>(&mut self, statement: S) -> Result<Vec<RellN>> where S: AsRef<str>
+    {
+
+        let (parent_id, symbol_of_node) = if let Some(node) = self.get_at_path(statement)
+        {
+            (node.parent, node.sym)
+        }
+        else
+        {
+            return Err(Error::CustomError("Removing at non-existing path".to_string()));
+        };
+
+
+        let parent = self.nodes.get_mut(&parent_id).unwrap();
+        let nid = parent.remove(&symbol_of_node);
+
+        let deleted = self.nodes.remove(&nid).unwrap();
+        let mut all_deleted = vec![];
+        let mut to_delete = vec![deleted];
+
+        while !to_delete.is_empty() {
+            let ntd = to_delete.pop().unwrap();
+
+            match &ntd.edge {
+                RellE::Exclusive(_sid, nid) => {
+                    to_delete.push(self.nodes.remove(&nid).unwrap())
+                },
+                RellE::NonExclusive(node_map) => {
+                    node_map.iter().for_each(|(_sid, nid)| {
+                        to_delete.push(self.nodes.remove(&nid).unwrap());
+                    })
+                }
+                _ => {}
+            }
+            all_deleted.push(ntd);
+        }
+
+        // TODO: Should we delete all the symbols?
+
+        Ok(all_deleted)
     }
 
     fn add_symbol_instance(&mut self, sym: RellSym)
@@ -283,13 +330,13 @@ impl RellTree
 
         if exclusive
         {
-            insert_node.upgrade(&RellE::Exclusive(sid, new_nid))?;
+            insert_node.upgrade(&RellE::Exclusive(sid, new_nid));
         }
         else
         {
             if let RellE::Empty = insert_node.edge
             {
-                insert_node.upgrade(&RellE::NonExclusive(BTreeMap::new()))?;
+                insert_node.upgrade(&RellE::NonExclusive(BTreeMap::new()));
             }
             else if let RellE::Exclusive(_, _) = insert_node.edge
             {
@@ -360,8 +407,6 @@ mod test
         t.add_statement("a.f.e")?;
         t.add_statement("z.q.r")?;
         t.add_statement("z.x!p")?;
-
-        assert!(t.add_statement("z!y").is_err()); // Incompatible with z.*
 
         assert_eq!(
             format!("{}", t),
@@ -509,8 +554,7 @@ mod test
         t.add_statement("t")?;
         let node_id_of_statement = t.add_statement("t.15").unwrap()[0];
         assert_eq!(t.get_at_path("t.15").unwrap(), t.nodes.get(&node_id_of_statement).unwrap());
-
-        assert!(t.add_statement("t!2").is_err(), "Numeric incompatible insertion being ignored");
+        assert!(t.add_statement("t!2").is_err());
 
         t.add_statement("t.a")?;
         t.add_statement("t.b")?;
@@ -519,8 +563,8 @@ mod test
         t2.add_statement("t.c")?;
         t2.add_statement("t.k.d")?;
 
-        println!("{}", t);
-        println!("{}", t2);
+        debug!("{}", t);
+        debug!("{}", t2);
         let glb = t.greatest_lower_bound(&t2).unwrap();
         assert_eq!(format!("{}", glb),
                            "ROOT\n\
@@ -589,6 +633,8 @@ mod test
     #[test]
     fn baseline_verification() -> Result<()>
     {
+        
+        let _ = env_logger::builder().is_test(true).try_init();
         let mut w = RellTree::new();
         w.add_statement("brown.is!happy")?;
         w.add_statement("brown.knows.stuff")?;
@@ -605,14 +651,44 @@ mod test
         assert!(w.get_at_path("brown.is!happy.today").is_none()); // !happy cant be satisfied by !sad
         assert!(w.get_at_path("brown!is!sad.today").is_none()); // !is can't be satisfied by .is
 
-        let e = w.add_statement("brown.is.sad.today");
-        if let Err(Error::CustomError(_)) = e
-        {
-            Ok(())
-        }
-        else
-        {
-            Err(Error::CustomError(format!("Unexpected Result {:?}", e)))
-        }
+        assert!(w.add_statement("brown.is.extatic").is_err());
+
+        Ok(())
+    }
+
+    #[test]
+    fn overwriting() -> Result<()>
+    {
+
+        let mut w = RellTree::new();
+        w.add_statement("a.b!c")?;
+        w.add_statement("a.b!d")?;
+        assert!(w.get_at_path("a.b!d").is_some());
+        assert!(w.get_at_path("a.b!c").is_none());
+
+        Ok(())
+    }
+
+    #[test]
+    fn removing() -> Result<()>
+    {
+
+        let mut w = RellTree::new();
+        let added_nids = w.add_statement("a.b.c.d")?;
+        let removed_nodes = w.remove_at_path("a.b.c")?;
+
+        assert!(w.get_at_path("a.b.c.d").is_none(), "Path still reachable after delete");
+        assert!(w.get_at_path("a.b.c").is_none(), "Path still reachable after delete");
+        assert!(w.get_at_path("a.b").is_some(), "Path should be reachable");
+
+        added_nids.iter().skip(2).for_each(|nid| {
+            assert!(w.nodes.get(nid).is_none(), "Node still exists in Tree Map");
+        });
+
+        assert_eq!(removed_nodes.len(), 2, "Wrong number of nodes where deleted");
+
+        assert!(w.remove_at_path("non.existent").is_err());
+
+        Ok(())
     }
 }

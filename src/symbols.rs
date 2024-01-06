@@ -54,10 +54,38 @@ impl SymbolsTable
         self.symbols.iter()
     }
 
-    pub fn bind_variables(&mut self, variable_values: &mut BTreeMap<SID, SID>)
+    pub fn bind_variables(&mut self, variable_values: &BTreeMap<SID, SID>)
     {
-        //TODO: Verify that actually only Identifiers are being bound
-        self.bound_variables.append(variable_values);
+        debug!("Binding Starting on {:?} with {:?}", self.symbols, variable_values);
+        variable_values.iter().for_each(|(_k_sid, v_sid)|
+        {
+            /*
+            TODO: This breaks because we don't register the literals as we parse them in the
+            binding code. I am unsure if this was a design decision or fix or deliberate or just an
+            oversight, but this is starting to point in the direction of the whole symbols table needing some serious love.
+            match self.symbols.get(k_sid)
+            {
+                None => { panic!("Binding non existing symbol {}", k_sid) },
+                Some(s) => {
+                    if let RellSymValue::Identifier(_) = s.get_val()
+                    {
+                        // all good
+                    }
+                    else
+                    {
+                        panic!("Trying to bind literal symbol {:?} ", s.get_val());
+                    }
+                }
+            }
+            */
+
+            if self.symbols.get(v_sid).is_none()
+            {
+                panic!("Trying to bind to unexisting symbol");
+            }
+        });
+
+        self.bound_variables.append(&mut variable_values.clone());
     }
 
     pub fn clear_bindings(&mut self)
@@ -71,9 +99,7 @@ impl SIDGenerator for SymbolsTable
     fn get_sid<S>(&self, sym:S) -> SID
         where S: AsRef<str>, S: Hash
     {
-        let mut hasher = DefaultHasher::new();
-        sym.hash(&mut hasher);
-        let v = hasher.finish();
+        let v = self.get_sid_no_binding(sym);
 
         if let Some(other_sid) = self.bound_variables.get(&v)
         {

@@ -35,7 +35,6 @@ pub mod errors
         }
     }
 }
-use errors::{Result, Error};
 
 #[derive(Debug, PartialEq)]
 pub struct RellN
@@ -48,21 +47,30 @@ impl RellN
 {
     pub const NID_INVALID: NID = 0;
 
+    pub fn get<'a>(&'a self, sidref: &SID) -> Option<&'a NID>
+    {
+        self.edge.get(&sidref)
+    }
+
     pub fn insert(&mut self, sid: &SID, nid: &NID)
     {
         self.edge.insert(sid, nid);
     }
 
-    pub fn upgrade(&mut self, to_edge: &RellE) -> Result<()>
+    pub fn remove(&mut self, sid: &SID) -> NID
+    {
+        self.edge.remove(sid)
+    }
+
+    pub fn upgrade(&mut self, to_edge: &RellE)
     {
         match (&self.edge, to_edge)
         {
             (&RellE::Empty, other) =>
             {
                 self.edge = other.clone();
-                Ok(())
             },
-            (_, _) => Err(Error::CustomError(format!("CANT UPGRADE {:?} TO {:?}", self.edge, to_edge)))
+            (_, _) => panic!("Cant Upgrade {:?} TO {:?}", self.edge, to_edge)
         }
     }
 }
@@ -95,6 +103,35 @@ impl RellE
             Self::Exclusive(sid, nid) => {
                 if *sid == *sidref { Some(&nid) }
                 else { None }
+            }
+        }
+    }
+
+    pub fn remove(&mut self, sid: &SID) -> NID
+    {
+        match self {
+            Self::Empty => { panic!("Removing from Empty Edge") },
+            Self::Exclusive(s, n) => {
+                let n = *n;
+                if s != sid
+                {
+                   panic!("Removing a non exisiting connection from Exclusive Edge signals an issue upstream");
+                }
+                else
+                {
+                    *self = Self::Empty;
+                    n
+                }
+            },
+            Self::NonExclusive(connections) => {
+                if let Some(nid) = connections.remove(&sid)
+                {
+                    nid
+                }
+                else
+                {
+                    panic!("Removing non existing connection from NonExclusive Edge signals an issue upstream"); 
+                }
             }
         }
     }
@@ -173,4 +210,10 @@ impl std::fmt::Display for RellSym
     {
         write!(f, "{}", self.get_display())
     } 
+}
+
+
+#[cfg(test)]
+mod test
+{
 }
