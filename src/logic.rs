@@ -73,12 +73,12 @@ pub mod implications
 
         pub fn apply(&mut self, tree: &mut RellTree) -> Result<bool>
         {
-            let mut compat_bindings = self.binding_state.generate_compatible_on(tree);
+            let compat_bindings = self.binding_state.generate_compatible_on(tree);
 
             debug!("Compatible Bindings Found: {}", compat_bindings.len());
             debug!("Compatible Bindings: {:?}", compat_bindings);
             let mut added = 0;
-            for compat_binding in &mut compat_bindings
+            for compat_binding in &compat_bindings
             {
                 tree.symbols.bind_variables(compat_binding);
                 for posterior in &self.posteriors

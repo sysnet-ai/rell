@@ -54,7 +54,7 @@ impl SymbolsTable
         self.symbols.iter()
     }
 
-    pub fn bind_variables(&mut self, variable_values: &mut BTreeMap<SID, SID>)
+    pub fn bind_variables(&mut self, variable_values: &BTreeMap<SID, SID>)
     {
         debug!("Binding Starting on {:?} with {:?}", self.symbols, variable_values);
         variable_values.iter().for_each(|(_k_sid, v_sid)|
@@ -85,7 +85,7 @@ impl SymbolsTable
             }
         });
 
-        self.bound_variables.append(variable_values);
+        self.bound_variables.append(&mut variable_values.clone());
     }
 
     pub fn clear_bindings(&mut self)
