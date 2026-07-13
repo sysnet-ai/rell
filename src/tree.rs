@@ -219,87 +219,72 @@ impl RellTree
         while !node_trios.is_empty()
         {
             let (a_nid, b_nid, glb_nid) = node_trios.pop().unwrap();
-            let a_node   = self.nodes.get(&a_nid).unwrap();
-            let b_node   = other.nodes.get(&b_nid).unwrap();
+            let a_node = self.nodes.get(&a_nid).unwrap();
+            let b_node = other.nodes.get(&b_nid).unwrap();
 
-            match(&a_node.edge, &b_node.edge)
+            match RellE::classify_pair(&a_node.edge, &b_node.edge)
             {
-                (RellE::NonExclusive(a_emap), RellE::NonExclusive(b_emap)) =>
+                EdgePairKind::BothEmpty => {},
+
+                EdgePairKind::OneEmpty { live } =>
                 {
-                    // If both non-exclusive add to GLB node the union of
-                    // both maps and add new nodes appropriately
-                    //
-
-                    for (&sym, a_nid) in a_emap
+                    let src = if matches!(a_node.edge, RellE::Empty) { other } else { self };
+                    match live
                     {
-
-                        if let Some(b_nid) = b_emap.get(&sym)
+                        RellE::Exclusive(_, x_nid) =>
                         {
-                            // Symbol exists in both nodes, insert into glb and add them to the
-                            // queue
+                            glb.clone_subgraph_into(&glb_nid, src, x_nid, true).unwrap();
+                        },
+                        RellE::NonExclusive(map) =>
+                        {
+                            for nid in map.values()
+                            {
+                                glb.clone_subgraph_into(&glb_nid, src, nid, false).unwrap();
+                            }
+                        },
+                        RellE::Empty => unreachable!(),
+                    }
+                },
+
+                EdgePairKind::BothNonExclusive { a_map, b_map } =>
+                {
+                    for (&sym, a_child_nid) in a_map
+                    {
+                        if let Some(b_child_nid) = b_map.get(&sym)
+                        {
+                            // Symbol exists in both — insert into GLB and recurse
                             let new_nid = glb.insert_into(&glb_nid, RellN { edge: RellE::Empty, sym, parent: glb_nid }, false).unwrap();
-                            node_trios.push((*a_nid, *b_nid, new_nid))
+                            node_trios.push((*a_child_nid, *b_child_nid, new_nid));
                         }
                         else
                         {
-                            // Symbol exists only in A, so clone the sub-tree and be done
-                            glb.clone_subgraph_into(&glb_nid, self, a_nid, false).unwrap();
+                            // Only in A — clone subtree
+                            glb.clone_subgraph_into(&glb_nid, self, a_child_nid, false).unwrap();
                         }
                     }
-
-                    for (&sym, b_nid) in b_emap
+                    for (&sym, b_child_nid) in b_map
                     {
-                        if a_emap.get(&sym).is_none()
+                        if a_map.get(&sym).is_none()
                         {
-                            // Symbol exists only in B, copy subtree here
-                            glb.clone_subgraph_into(&glb_nid, other, b_nid, false).unwrap();
+                            // Only in B — clone subtree
+                            glb.clone_subgraph_into(&glb_nid, other, b_child_nid, false).unwrap();
                         }
-                        // else {...} already taken care of in the loop above
                     }
                 },
-                (RellE::Empty, e) | (e, RellE::Empty) =>
-                {
-                    // If one side is empty, just clone the other tree into the GLB-tree
-                    match e 
-                    {
-                        RellE::Exclusive(_, x_nid) => {
-                            glb.clone_subgraph_into(&glb_nid, other, x_nid, true).unwrap();
-                        },
-                        RellE::NonExclusive(nex_map) => {
-                            for nex_nid in nex_map.values()
-                            {
-                                glb.clone_subgraph_into(&glb_nid, other, nex_nid, false).unwrap();
-                            }
-                        },
-                        _ => {}
-                    }
-                },
-                (RellE::Exclusive(a_sid, a_nid), RellE::Exclusive(b_sid, b_nid)) =>
-                {
-                    // If they both go to the same symbol add, else incompat
-                    if a_sid == b_sid
-                    {
-                        let new_nid = glb.insert_into(&glb_nid, RellN { edge: RellE::Empty, sym: *a_sid, parent: glb_nid }, true).unwrap();
-                        node_trios.push((*a_nid, *b_nid, new_nid));
-                    }
-                    else
-                    {
-                        return None; // Incompatible Trees
-                    }
-                },
-                (RellE::Exclusive(x_sid, x_nid), RellE::NonExclusive(nex_map)) | (RellE::NonExclusive(nex_map), RellE::Exclusive(x_sid, x_nid)) =>
-                {
-                    // if an X and a NX edges are found, they're considered compatible IFF they go
-                    // to the same symbol AND the NX edge goes to no other symbols
-                    //
-                    if !nex_map.contains_key(&x_sid) || nex_map.len() != 1
-                    {
-                        return None;
-                    }
 
-                    let new_nid = glb.insert_into(&glb_nid, RellN { edge: RellE::Empty, sym: *x_sid, parent: glb_nid }, true).unwrap();
-                    node_trios.push((*x_nid, *nex_map.get(&x_sid).unwrap(), new_nid));
-                }
+                EdgePairKind::BothExclusiveSameSid { sid, a_nid: a_child, b_nid: b_child } =>
+                {
+                    let new_nid = glb.insert_into(&glb_nid, RellN { edge: RellE::Empty, sym: sid, parent: glb_nid }, true).unwrap();
+                    node_trios.push((a_child, b_child, new_nid));
+                },
+
+                EdgePairKind::ExclusiveNonExclusive { sid, x_nid, nex_nid, .. } =>
+                {
+                    let new_nid = glb.insert_into(&glb_nid, RellN { edge: RellE::Empty, sym: sid, parent: glb_nid }, true).unwrap();
+                    node_trios.push((x_nid, nex_nid, new_nid));
+                },
+
+                EdgePairKind::Incompatible => return None,
             }
         }
 
@@ -688,6 +673,24 @@ mod test
         assert_eq!(removed_nodes.len(), 2, "Wrong number of nodes where deleted");
 
         assert!(w.remove_at_path("non.existent").is_err());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_cmp_exclusive_vs_multi_nonexclusive() -> Result<()>
+    {
+        let mut a = RellTree::new();
+        a.add_statement("t!x")?;
+
+        let mut b = RellTree::new();
+        b.add_statement("t.x")?;
+        b.add_statement("t.y")?;
+
+        // A is exclusive to x only; B has x AND y.
+        // B is not a subgraph of A, so A ≤ B must not hold.
+        assert!(!(a < b), "t!x should not be ≤ t.x t.y");
+        assert!(b > a,    "t.x t.y should be > t!x");
 
         Ok(())
     }

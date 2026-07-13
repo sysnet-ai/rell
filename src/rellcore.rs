@@ -1,6 +1,33 @@
 use std::collections::BTreeMap;
 use std::hash::Hash;
 
+pub enum EdgePairKind<'a>
+{
+    BothEmpty,
+    OneEmpty
+    {
+        live: &'a RellE,
+    },
+    BothNonExclusive
+    {
+        a_map: &'a BTreeMap<SID, NID>,
+        b_map: &'a BTreeMap<SID, NID>,
+    },
+    BothExclusiveSameSid
+    {
+        sid: SID,
+        a_nid: NID,
+        b_nid: NID,
+    },
+    ExclusiveNonExclusive
+    {
+        sid: SID,
+        x_nid: NID,
+        nex_nid: NID,
+    },
+    Incompatible,
+}
+
 // CORE
 pub type NID = usize; // NODE ID   (Monotonically increased from 1)
 pub type SID = u64;   // SYMBOL ID (Hashed from value)
@@ -84,6 +111,40 @@ pub enum RellE
 }
 impl RellE
 {
+    pub fn classify_pair<'a>(a: &'a RellE, b: &'a RellE) -> EdgePairKind<'a>
+    {
+        match (a, b)
+        {
+            (RellE::Empty, RellE::Empty) => EdgePairKind::BothEmpty,
+            (RellE::Empty, _) => EdgePairKind::OneEmpty { live: b },
+            (_, RellE::Empty) => EdgePairKind::OneEmpty { live: a },
+            (RellE::NonExclusive(am), RellE::NonExclusive(bm)) =>
+                EdgePairKind::BothNonExclusive { a_map: am, b_map: bm },
+            (RellE::Exclusive(a_sid, a_nid), RellE::Exclusive(b_sid, b_nid)) =>
+            {
+                if a_sid == b_sid
+                {
+                    EdgePairKind::BothExclusiveSameSid { sid: *a_sid, a_nid: *a_nid, b_nid: *b_nid }
+                }
+                else
+                {
+                    EdgePairKind::Incompatible
+                }
+            },
+            (RellE::Exclusive(x_sid, x_nid), RellE::NonExclusive(nex)) |
+            (RellE::NonExclusive(nex), RellE::Exclusive(x_sid, x_nid)) =>
+            {
+                if nex.len() == 1 && nex.contains_key(x_sid)
+                {
+                    EdgePairKind::ExclusiveNonExclusive {
+                        sid: *x_sid, x_nid: *x_nid, nex_nid: *nex.get(x_sid).unwrap(),
+                    }
+                }
+                else { EdgePairKind::Incompatible }
+            },
+        }
+    }
+
     pub fn insert(&mut self, sidref: &SID, nidref: &NID)
     {
         match self
