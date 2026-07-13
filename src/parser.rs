@@ -43,7 +43,7 @@ impl RellParser
                     };
 
                     let n = RellN { edge, sym: sid, parent: RellN::NID_INVALID };
-                    println!("{:?}", n);
+                    debug!("{:?}", n);
                     nodes.push(n);
 
                     let val = match sym.chars().next().unwrap()
@@ -62,7 +62,7 @@ impl RellParser
                         // No need to check for invalid characters, that was done by the tokenizer
                         _ => { RellSymValue::Literal(sym.to_string()) }
                     };
-                    println!("{:?}",val);
+                    debug!("{:?}",val);
                     syms.push(RellSym::new(val))
                 },
                 err_tok => {
@@ -88,7 +88,7 @@ impl RellParser
             let sid = sidfactory.get_sid(&sym);
 
             let pt = ParseToken::Symbol(sid, scan, i_eos);
-            println!("TOKEN: {:?}", pt);
+            debug!("TOKEN: {:?}", pt);
             qt.push(pt);
 
             qt.push(
@@ -106,7 +106,7 @@ impl RellParser
         Ok(qt)
     }
 
-    const INVALID_CHARS: &'static str = "%$@#,][";
+    const INVALID_CHARS: &'static str = "%$@#,][)(";
     pub fn find_next_eos<S>(statement: S, start: usize) -> Result<usize>
         where S: AsRef<str>
     {

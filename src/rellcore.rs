@@ -1,6 +1,33 @@
 use std::collections::BTreeMap;
 use std::hash::Hash;
 
+pub enum EdgePairKind<'a>
+{
+    BothEmpty,
+    OneEmpty
+    {
+        live: &'a RellE,
+    },
+    BothNonExclusive
+    {
+        a_map: &'a BTreeMap<SID, NID>,
+        b_map: &'a BTreeMap<SID, NID>,
+    },
+    BothExclusiveSameSid
+    {
+        sid: SID,
+        a_nid: NID,
+        b_nid: NID,
+    },
+    ExclusiveNonExclusive
+    {
+        sid: SID,
+        x_nid: NID,
+        nex_nid: NID,
+    },
+    Incompatible,
+}
+
 // CORE
 pub type NID = usize; // NODE ID   (Monotonically increased from 1)
 pub type SID = u64;   // SYMBOL ID (Hashed from value)
@@ -35,7 +62,6 @@ pub mod errors
         }
     }
 }
-use errors::{Result, Error};
 
 #[derive(Debug, PartialEq)]
 pub struct RellN
@@ -48,21 +74,30 @@ impl RellN
 {
     pub const NID_INVALID: NID = 0;
 
+    pub fn get<'a>(&'a self, sidref: &SID) -> Option<&'a NID>
+    {
+        self.edge.get(&sidref)
+    }
+
     pub fn insert(&mut self, sid: &SID, nid: &NID)
     {
         self.edge.insert(sid, nid);
     }
 
-    pub fn upgrade(&mut self, to_edge: &RellE) -> Result<()>
+    pub fn remove(&mut self, sid: &SID) -> NID
+    {
+        self.edge.remove(sid)
+    }
+
+    pub fn upgrade(&mut self, to_edge: &RellE)
     {
         match (&self.edge, to_edge)
         {
             (&RellE::Empty, other) =>
             {
                 self.edge = other.clone();
-                Ok(())
             },
-            (_, _) => Err(Error::CustomError(format!("CANT UPGRADE {:?} TO {:?}", self.edge, to_edge)))
+            (_, _) => panic!("Cant Upgrade {:?} TO {:?}", self.edge, to_edge)
         }
     }
 }
@@ -76,6 +111,40 @@ pub enum RellE
 }
 impl RellE
 {
+    pub fn classify_pair<'a>(a: &'a RellE, b: &'a RellE) -> EdgePairKind<'a>
+    {
+        match (a, b)
+        {
+            (RellE::Empty, RellE::Empty) => EdgePairKind::BothEmpty,
+            (RellE::Empty, _) => EdgePairKind::OneEmpty { live: b },
+            (_, RellE::Empty) => EdgePairKind::OneEmpty { live: a },
+            (RellE::NonExclusive(am), RellE::NonExclusive(bm)) =>
+                EdgePairKind::BothNonExclusive { a_map: am, b_map: bm },
+            (RellE::Exclusive(a_sid, a_nid), RellE::Exclusive(b_sid, b_nid)) =>
+            {
+                if a_sid == b_sid
+                {
+                    EdgePairKind::BothExclusiveSameSid { sid: *a_sid, a_nid: *a_nid, b_nid: *b_nid }
+                }
+                else
+                {
+                    EdgePairKind::Incompatible
+                }
+            },
+            (RellE::Exclusive(x_sid, x_nid), RellE::NonExclusive(nex)) |
+            (RellE::NonExclusive(nex), RellE::Exclusive(x_sid, x_nid)) =>
+            {
+                if nex.len() == 1 && nex.contains_key(x_sid)
+                {
+                    EdgePairKind::ExclusiveNonExclusive {
+                        sid: *x_sid, x_nid: *x_nid, nex_nid: *nex.get(x_sid).unwrap(),
+                    }
+                }
+                else { EdgePairKind::Incompatible }
+            },
+        }
+    }
+
     pub fn insert(&mut self, sidref: &SID, nidref: &NID)
     {
         match self
@@ -95,6 +164,35 @@ impl RellE
             Self::Exclusive(sid, nid) => {
                 if *sid == *sidref { Some(&nid) }
                 else { None }
+            }
+        }
+    }
+
+    pub fn remove(&mut self, sid: &SID) -> NID
+    {
+        match self {
+            Self::Empty => { panic!("Removing from Empty Edge") },
+            Self::Exclusive(s, n) => {
+                let n = *n;
+                if s != sid
+                {
+                   panic!("Removing a non exisiting connection from Exclusive Edge signals an issue upstream");
+                }
+                else
+                {
+                    *self = Self::Empty;
+                    n
+                }
+            },
+            Self::NonExclusive(connections) => {
+                if let Some(nid) = connections.remove(&sid)
+                {
+                    nid
+                }
+                else
+                {
+                    panic!("Removing non existing connection from NonExclusive Edge signals an issue upstream"); 
+                }
             }
         }
     }
@@ -173,4 +271,10 @@ impl std::fmt::Display for RellSym
     {
         write!(f, "{}", self.get_display())
     } 
+}
+
+
+#[cfg(test)]
+mod test
+{
 }

@@ -14,54 +14,50 @@ impl std::cmp::PartialOrd for RellTree
             let a_node = self.nodes.get(&a_nid).unwrap();
             let b_node = other.nodes.get(&b_nid).unwrap();
 
-            match (&b_node.edge, &a_node.edge)
+            match RellE::classify_pair(&a_node.edge, &b_node.edge)
             {
-                (RellE::NonExclusive(b_emap), RellE::NonExclusive(a_emap)) =>
+                EdgePairKind::BothEmpty => {},
+                EdgePairKind::OneEmpty { .. } =>
                 {
-                    // If both are non-exclusive, all edges in B must also exist
-                    // in A
-                    for b_sid in b_emap.keys()
+                    if !matches!(b_node.edge, RellE::Empty)
                     {
-                        if !a_emap.contains_key(b_sid)
+                        // A is the leaf but B has edges — A is missing info B has
+                        return Some(std::cmp::Ordering::Greater);
+                    }
+                    // else B is the leaf — A may have more info, that's fine
+                },
+                EdgePairKind::BothNonExclusive { a_map, b_map } =>
+                {
+                    for (b_sid, b_child) in b_map
+                    {
+                        match a_map.get(b_sid)
                         {
-                            return Some(std::cmp::Ordering::Greater);
+                            None          => return Some(std::cmp::Ordering::Greater),
+                            Some(a_child) => node_pairs.push((*a_child, *b_child)),
                         }
-
-                        let b_nid = b_emap.get(b_sid).unwrap();
-                        let a_nid = a_emap.get(b_sid).unwrap();
-
-                        node_pairs.push((*a_nid, *b_nid));
                     }
                 },
-                (RellE::Exclusive(b_sid, b_nid), RellE::Exclusive(a_sid, a_nid)) =>
+                EdgePairKind::BothExclusiveSameSid { a_nid, b_nid, .. } =>
                 {
-                    // If both are exclusive, they must go to the same symbol
-                    if b_sid != a_sid
+                    node_pairs.push((a_nid, b_nid));
+                },
+                EdgePairKind::ExclusiveNonExclusive { x_nid, nex_nid, .. } =>
+                {
+                    if matches!(a_node.edge, RellE::Exclusive(_, _))
                     {
+                        // A is exclusive, B is a matching non-exclusive singleton — A satisfies B
+                        node_pairs.push((x_nid, nex_nid));
+                    }
+                    else
+                    {
+                        // B is exclusive, A is non-exclusive — A cannot satisfy B's stricter constraint
                         return Some(std::cmp::Ordering::Greater);
                     }
-                    node_pairs.push((*a_nid, *b_nid));
                 },
-                (RellE::NonExclusive(b_emap), RellE::Exclusive(a_sid, a_nid)) =>
-                {
-                    // If A!C exists then B.C must exist
-                    if !b_emap.contains_key(a_sid)
-                    {
-                        return Some(std::cmp::Ordering::Greater);
-                    }
-
-                    let b_nid = b_emap.get(a_sid).unwrap();
-                    node_pairs.push((*a_nid, *b_nid));
-                },
-                (RellE::Empty, _) =>
-                {
-                    // Node is a leaf in B, Node is NOT a leaf in A - this is ok, carry on
-                    continue
-                },
-                (_, _) =>
+                EdgePairKind::Incompatible =>
                 {
                     return Some(std::cmp::Ordering::Greater);
-                }
+                },
             }
         }
         Some(std::cmp::Ordering::Less)
